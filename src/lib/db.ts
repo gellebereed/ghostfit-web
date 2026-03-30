@@ -24,9 +24,21 @@ async function uid(): Promise<string | null> {
 // localStorage cache key for instant first-render
 const PROFILE_CACHE_KEY = 'ghostfit_profile';
 
+// Strict in-memory cache for SPA instant fluid navigation
+const memoryCache: {
+  profile?: UserProfile | null;
+  plan?: WorkoutPlan | null;
+  sessions?: GhostSession[] | null;
+  winCount?: number;
+  streak?: number;
+  yesterdayResult?: 'win' | 'loss' | 'none';
+} = {};
+
 // ─── Profile ─────────────────────────────────────────────────────────────────
 
 export async function getProfile(): Promise<UserProfile | null> {
+  if (memoryCache.profile !== undefined) return memoryCache.profile;
+
   // Fast path: return cached value immediately while Supabase loads
   const cached = localStorage.getItem(PROFILE_CACHE_KEY);
   const userId = await uid();
@@ -49,6 +61,7 @@ export async function getProfile(): Promise<UserProfile | null> {
     createdAt: new Date(data.created_at).getTime(),
   };
   localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));
+  memoryCache.profile = profile;
   return profile;
 }
 
@@ -64,6 +77,7 @@ export async function saveProfile(profile: UserProfile): Promise<void> {
     onboarding_complete: profile.onboardingComplete,
   });
   localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));
+  memoryCache.profile = profile;
 }
 
 // ─── Workout Plans ────────────────────────────────────────────────────────────
@@ -85,9 +99,12 @@ export async function savePlan(plan: WorkoutPlan): Promise<void> {
     is_active: true,
     created_at: new Date(plan.createdAt).toISOString(),
   });
+  memoryCache.plan = plan;
 }
 
 export async function getCurrentPlan(): Promise<WorkoutPlan | null> {
+  if (memoryCache.plan !== undefined) return memoryCache.plan;
+
   const userId = await uid();
   if (!userId) return null;
 
@@ -101,11 +118,13 @@ export async function getCurrentPlan(): Promise<WorkoutPlan | null> {
     .single();
 
   if (error || !data) return null;
-  return {
+  const plan = {
     weekNumber: data.week_number,
     days: data.days,
     createdAt: new Date(data.created_at).getTime(),
   };
+  memoryCache.plan = plan;
+  return plan;
 }
 
 // ─── Ghost Sessions ───────────────────────────────────────────────────────────
@@ -126,9 +145,17 @@ export async function saveGhostSession(session: GhostSession): Promise<void> {
     result: session.result,
     character_tier: session.characterTier,
   });
+  
+  // Invalidate session-dependent caches
+  memoryCache.sessions = null;
+  memoryCache.winCount = undefined;
+  memoryCache.streak = undefined;
+  memoryCache.yesterdayResult = undefined;
 }
 
 export async function getAllSessions(): Promise<GhostSession[]> {
+  if (memoryCache.sessions !== undefined && memoryCache.sessions !== null) return memoryCache.sessions;
+
   const userId = await uid();
   if (!userId) return [];
 
@@ -139,7 +166,9 @@ export async function getAllSessions(): Promise<GhostSession[]> {
     .order('date', { ascending: false });
 
   if (error || !data) return [];
-  return data.map(rowToSession);
+  const sessions = data.map(rowToSession);
+  memoryCache.sessions = sessions;
+  return sessions;
 }
 
 export async function getGhostForExercise(exerciseName: string): Promise<GhostSession | null> {
@@ -160,6 +189,8 @@ export async function getGhostForExercise(exerciseName: string): Promise<GhostSe
 }
 
 export async function getWinCount(): Promise<number> {
+  if (memoryCache.winCount !== undefined) return memoryCache.winCount;
+  
   const userId = await uid();
   if (!userId) return 0;
 
@@ -169,10 +200,14 @@ export async function getWinCount(): Promise<number> {
     .eq('user_id', userId)
     .eq('result', 'win');
 
-  return error ? 0 : (count ?? 0);
+  const wc = error ? 0 : (count ?? 0);
+  memoryCache.winCount = wc;
+  return wc;
 }
 
 export async function getStreak(): Promise<number> {
+  if (memoryCache.streak !== undefined) return memoryCache.streak;
+
   const sessions = await getAllSessions();
   let streak = 0;
   const byDate = new Map<string, GhostSession[]>();
@@ -188,10 +223,13 @@ export async function getStreak(): Promise<number> {
     if (byDate.get(d)!.some(s => s.result === 'win')) streak++;
     else break;
   }
+  memoryCache.streak = streak;
   return streak;
 }
 
 export async function getYesterdayResult(): Promise<'win' | 'loss' | 'none'> {
+  if (memoryCache.yesterdayResult !== undefined) return memoryCache.yesterdayResult;
+
   const userId = await uid();
   if (!userId) return 'none';
 
@@ -209,7 +247,9 @@ export async function getYesterdayResult(): Promise<'win' | 'loss' | 'none'> {
   if (!data || data.length === 0) return 'none';
   const wins = data.filter(s => s.result === 'win').length;
   const losses = data.filter(s => s.result !== 'win').length;
-  return wins >= losses ? 'win' : 'loss';
+  const res = wins >= losses ? 'win' : 'loss';
+  memoryCache.yesterdayResult = res;
+  return res;
 }
 
 export async function getAllTimeBest(exerciseName: string): Promise<{ totalReps: number; totalDuration: number }> {

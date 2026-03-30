@@ -55,8 +55,8 @@ export const config = {
   matcher: [
     /*
      * Match all request paths except _next/static, _next/image,
-     * favicon, and public assets.
+     * favicon, manifest.json, and public assets.
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
