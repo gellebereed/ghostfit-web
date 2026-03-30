@@ -22,78 +22,99 @@ const WORKOUT_FOCUS_IMAGES: Record<string, string> = {
 
 export default function HomePage() {
   const router = useRouter();
+  const [ready, setReady] = useState(false);
+  const [showLoader, setShowLoader] = useState(false);
   const [plan, setPlan] = useState<WorkoutPlan | null>(null);
   const [today, setToday] = useState<WorkoutDay | null>(null);
   const [battleResult, setBattleResult] = useState<'win' | 'loss' | 'none'>('none');
   const [winCount, setWinCount] = useState(0);
   const [streak, setStreakVal] = useState(0);
   const [tier, setTier] = useState(1);
-  const [ready, setReady] = useState(false);
   const [completed, setCompleted] = useState<Set<string>>(new Set());
   const [completedDays, setCompletedDays] = useState<Set<number>>(new Set());
   const [taunt, setTaunt] = useState('');
 
-  useEffect(() => { init(); }, []);
+  useEffect(() => {
+    let mounted = true;
+    const loaderTimer = setTimeout(() => {
+      if (mounted) setShowLoader(true);
+    }, 100);
 
-  async function init() {
-    try {
-      const profile = await getProfile();
-      if (!profile?.onboardingComplete) { router.replace('/onboarding'); return; }
+    async function init() {
+      try {
+        const profile = await getProfile();
+        if (!profile?.onboardingComplete) { router.replace('/onboarding'); return; }
 
-      const [p, result, wc, s, sessions] = await Promise.all([
-        getCurrentPlan(),
-        getYesterdayResult(),
-        getWinCount(),
-        getStreak(),
-        getAllSessions()
-      ]);
+        const [p, result, wc, s, sessions] = await Promise.all([
+          getCurrentPlan(),
+          getYesterdayResult(),
+          getWinCount(),
+          getStreak(),
+          getAllSessions()
+        ]);
 
-      setPlan(p);
-      let isRest = false;
-      if (p) {
-        const dayOfWeek = new Date().getDay();
-        const dayNum = dayOfWeek === 0 ? 7 : dayOfWeek;
-        const td = p.days.find(d => d.dayNumber === dayNum) || null;
-        setToday(td);
-        isRest = td?.isRest || false;
+        setPlan(p);
+        let isRest = false;
+        if (p) {
+          const dayOfWeek = new Date().getDay();
+          const dayNum = dayOfWeek === 0 ? 7 : dayOfWeek;
+          const td = p.days.find(d => d.dayNumber === dayNum) || null;
+          setToday(td);
+          isRest = td?.isRest || false;
+        }
+
+        setBattleResult(result);
+        setWinCount(wc);
+        setTier(calculateTier(wc));
+        setStreakVal(s);
+
+        const todayStr = new Date().toDateString();
+        const todaySessions = sessions.filter(sess => new Date(sess.date).toDateString() === todayStr);
+        const completedNames = new Set(todaySessions.map(sess => sess.exerciseName));
+        setCompleted(completedNames);
+
+        const thisWeek = new Set<number>();
+        const now = new Date();
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay());
+        sessions.forEach(s => {
+          const d = new Date(s.date);
+          if (d >= startOfWeek) thisWeek.add(d.getDay());
+        });
+        setCompletedDays(thisWeek);
+
+        const isFirstDay = sessions.length === 0;
+        setTaunt(getGhostTaunt({
+          yesterdayResult: result,
+          streak: s,
+          isRest,
+          isFirstDay,
+        }));
+      } catch (err) {
+        console.error('GhostFit init error:', err);
+      } finally {
+        if (mounted) {
+          setReady(true);
+          clearTimeout(loaderTimer);
+        }
       }
-
-      setBattleResult(result);
-      setWinCount(wc);
-      setTier(calculateTier(wc));
-      setStreakVal(s);
-
-      const todayStr = new Date().toDateString();
-      const todaySessions = sessions.filter(sess => new Date(sess.date).toDateString() === todayStr);
-      const completedNames = new Set(todaySessions.map(sess => sess.exerciseName));
-      setCompleted(completedNames);
-
-      const thisWeek = new Set<number>();
-      const now = new Date();
-      const startOfWeek = new Date(now);
-      startOfWeek.setDate(now.getDate() - now.getDay());
-      sessions.forEach(s => {
-        const d = new Date(s.date);
-        if (d >= startOfWeek) thisWeek.add(d.getDay());
-      });
-      setCompletedDays(thisWeek);
-
-      // Taunt logic (Upgrade 6)
-      const isFirstDay = sessions.length === 0;
-      setTaunt(getGhostTaunt({
-        yesterdayResult: result,
-        streak: s,
-        isRest,
-        isFirstDay,
-      }));
-    } catch (err) {
-      console.error('GhostFit init error:', err);
-    } finally {
-      setReady(true);
     }
-  }
+    init();
+    return () => { 
+      mounted = false; 
+      clearTimeout(loaderTimer);
+    };
+  }, [router]);
 
-  if (!ready) return <div className="loading"><div className="loader" /></div>;
+  if (!ready) {
+    if (!showLoader) return null;
+    return (
+      <div className="flex-center" style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
+        <div className="ghost-loader" style={{ fontSize: 40 }}>👻</div>
+        <p style={{ color: 'var(--text2)', fontSize: 13 }}>Summoning your ghost...</p>
+      </div>
+    );
+  }
 
   const avatar = getAvatarPrefs();
   const isRest = today?.isRest;
@@ -113,7 +134,6 @@ export default function HomePage() {
         <p>Week {plan?.weekNumber || 1} · {today?.focus || 'Rest'} today</p>
       </div>
 
-      {/* Battle Card */}
       <div className={`battle-card ${isRest ? 'rest' : allDone ? 'win' : battleResult === 'win' ? 'win' : battleResult === 'loss' ? 'loss' : 'first'}`}>
         {allDone && <div className="today-chip" style={{ background: 'var(--accent)', color: '#000', top: 12, right: 12 }}>COMPLETED ✓</div>}
         {isRest ? (
@@ -165,7 +185,6 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Ghost Taunt - Upgrade 6 */}
         {taunt && <div className="taunt-bubble">{taunt}</div>}
 
         {!isRest && (
@@ -175,10 +194,8 @@ export default function HomePage() {
         )}
       </div>
 
-      {/* Today's workout preview — hero card */}
       {today && !today.isRest && (
         <div className="today-hero-card">
-          {/* Hero image */}
           <div className="today-hero-img-wrap">
             {WORKOUT_FOCUS_IMAGES[today.focus] && (
               <img
@@ -198,7 +215,6 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Exercise list */}
           <div className="today-hero-body">
             {today.exercises.slice(0, 3).map((ex, i) => (
               <div className="today-hero-ex" key={ex.name} style={{ opacity: completed.has(ex.name) ? 0.55 : 1 }}>
@@ -227,7 +243,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Week chips */}
       <div className="week-row">
         {DAYS.map((d, i) => {
           const isToday = new Date().getDay() === i;
@@ -250,7 +265,6 @@ export default function HomePage() {
         </Link>
       </div>
 
-      {/* Bottom nav */}
       <nav className="nav">
         <Link href="/" className="nav-item active">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
