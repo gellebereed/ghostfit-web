@@ -10,9 +10,15 @@ import { WorkoutPlan, GhostSession, UserProfile, ExerciseInfo } from './types';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+let cachedUserId: string | null = null;
 async function uid(): Promise<string | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id ?? null;
+  if (cachedUserId) return cachedUserId;
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.user?.id) {
+    cachedUserId = session.user.id;
+    return cachedUserId;
+  }
+  return null;
 }
 
 // localStorage cache key for instant first-render

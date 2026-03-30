@@ -40,7 +40,14 @@ export default function HomePage() {
       const profile = await getProfile();
       if (!profile?.onboardingComplete) { router.replace('/onboarding'); return; }
 
-      const p = await getCurrentPlan();
+      const [p, result, wc, s, sessions] = await Promise.all([
+        getCurrentPlan(),
+        getYesterdayResult(),
+        getWinCount(),
+        getStreak(),
+        getAllSessions()
+      ]);
+
       setPlan(p);
       let isRest = false;
       if (p) {
@@ -51,15 +58,11 @@ export default function HomePage() {
         isRest = td?.isRest || false;
       }
 
-      const result = await getYesterdayResult();
       setBattleResult(result);
-      const wc = await getWinCount();
       setWinCount(wc);
       setTier(calculateTier(wc));
-      const s = await getStreak();
       setStreakVal(s);
 
-      const sessions = await getAllSessions();
       const todayStr = new Date().toDateString();
       const todaySessions = sessions.filter(sess => new Date(sess.date).toDateString() === todayStr);
       const completedNames = new Set(todaySessions.map(sess => sess.exerciseName));
