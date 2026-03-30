@@ -1,0 +1,275 @@
+'use client';
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { getProfile, getCurrentPlan, getYesterdayResult, getWinCount, getStreak, getAllSessions } from '@/lib/db';
+import { WorkoutPlan, WorkoutDay, calculateTier } from '@/lib/types';
+import { getAvatarPrefs, getCharEmoji } from '@/lib/avatar';
+import { getGhostTaunt } from '@/lib/taunts';
+
+const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+const WORKOUT_FOCUS_IMAGES: Record<string, string> = {
+  'Upper Body': 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Bench_Press_-_Medium_Grip/0.jpg',
+  'Lower Body': 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Full_Squat/0.jpg',
+  'Push':       'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Bench_Press_-_Medium_Grip/0.jpg',
+  'Pull':       'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Curl/0.jpg',
+  'Legs':       'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Full_Squat/0.jpg',
+  'Core':       'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Ab_Crunch_Machine/0.jpg',
+  'Cardio':     'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Jogging,_Treadmill/0.jpg',
+  'Full Body':  'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Deadlift/0.jpg',
+};
+
+export default function HomePage() {
+  const router = useRouter();
+  const [plan, setPlan] = useState<WorkoutPlan | null>(null);
+  const [today, setToday] = useState<WorkoutDay | null>(null);
+  const [battleResult, setBattleResult] = useState<'win' | 'loss' | 'none'>('none');
+  const [winCount, setWinCount] = useState(0);
+  const [streak, setStreakVal] = useState(0);
+  const [tier, setTier] = useState(1);
+  const [ready, setReady] = useState(false);
+  const [completed, setCompleted] = useState<Set<string>>(new Set());
+  const [completedDays, setCompletedDays] = useState<Set<number>>(new Set());
+  const [taunt, setTaunt] = useState('');
+
+  useEffect(() => { init(); }, []);
+
+  async function init() {
+    try {
+      const profile = await getProfile();
+      if (!profile?.onboardingComplete) { router.replace('/onboarding'); return; }
+
+      const p = await getCurrentPlan();
+      setPlan(p);
+      let isRest = false;
+      if (p) {
+        const dayOfWeek = new Date().getDay();
+        const dayNum = dayOfWeek === 0 ? 7 : dayOfWeek;
+        const td = p.days.find(d => d.dayNumber === dayNum) || null;
+        setToday(td);
+        isRest = td?.isRest || false;
+      }
+
+      const result = await getYesterdayResult();
+      setBattleResult(result);
+      const wc = await getWinCount();
+      setWinCount(wc);
+      setTier(calculateTier(wc));
+      const s = await getStreak();
+      setStreakVal(s);
+
+      const sessions = await getAllSessions();
+      const todayStr = new Date().toDateString();
+      const todaySessions = sessions.filter(sess => new Date(sess.date).toDateString() === todayStr);
+      const completedNames = new Set(todaySessions.map(sess => sess.exerciseName));
+      setCompleted(completedNames);
+
+      const thisWeek = new Set<number>();
+      const now = new Date();
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - now.getDay());
+      sessions.forEach(s => {
+        const d = new Date(s.date);
+        if (d >= startOfWeek) thisWeek.add(d.getDay());
+      });
+      setCompletedDays(thisWeek);
+
+      // Taunt logic (Upgrade 6)
+      const isFirstDay = sessions.length === 0;
+      setTaunt(getGhostTaunt({
+        yesterdayResult: result,
+        streak: s,
+        isRest,
+        isFirstDay,
+      }));
+    } catch (err) {
+      console.error('GhostFit init error:', err);
+    } finally {
+      setReady(true);
+    }
+  }
+
+  if (!ready) return <div className="loading"><div className="loader" /></div>;
+
+  const avatar = getAvatarPrefs();
+  const isRest = today?.isRest;
+  const allDone = today && !isRest && today.exercises.every(ex => completed.has(ex.name));
+  const yourEmoji = getCharEmoji(avatar.yourCharacterStyle);
+  const ghostEmoji = getCharEmoji(avatar.ghostCharacterStyle);
+
+  return (
+    <>
+      <header className="hdr">
+        <span className="hdr-logo">👻 GHOSTFIT</span>
+        {streak > 0 && <span style={{ color: 'var(--accent)', fontSize: 13, fontWeight: 700 }}>{streak} day streak 🔥</span>}
+      </header>
+
+      <div className="greeting">
+        <h1>{getGreeting()}, let&apos;s go 💪</h1>
+        <p>Week {plan?.weekNumber || 1} · {today?.focus || 'Rest'} today</p>
+      </div>
+
+      {/* Battle Card */}
+      <div className={`battle-card ${isRest ? 'rest' : allDone ? 'win' : battleResult === 'win' ? 'win' : battleResult === 'loss' ? 'loss' : 'first'}`}>
+        {allDone && <div className="today-chip" style={{ background: 'var(--accent)', color: '#000', top: 12, right: 12 }}>COMPLETED ✓</div>}
+        {isRest ? (
+          <div className="battle-result">
+            <h3>😴 Rest Day</h3>
+            <p>Ghost is also resting. Come back tomorrow!</p>
+          </div>
+        ) : battleResult === 'win' ? (
+          <>
+            <div className="battle-arena">
+              <div className={`battle-char tier-${tier}`}>
+                <div className="ghost-body you celebrating" style={{ boxShadow: `0 0 15px ${avatar.yourAuraColor}40` }}>{yourEmoji}</div>
+                <span className="ghost-label">{avatar.yourCharacterName}</span>
+              </div>
+              <div className="battle-vs">VS</div>
+              <div className="battle-char">
+                <div className="ghost-body ghost defeated" style={{ background: `${avatar.ghostAuraColor}20` }}>{ghostEmoji}</div>
+                <span className="ghost-label" style={{ opacity: 0.6 }}>{avatar.ghostCharacterName}</span>
+              </div>
+            </div>
+            <div className="battle-result">
+              <h3>🔥 YOU WON — {streak} WIN STREAK</h3>
+              <p>Ghost is shook. Keep the streak going →</p>
+            </div>
+          </>
+        ) : battleResult === 'loss' ? (
+          <>
+            <div className="battle-arena">
+              <div className={`battle-char tier-${tier}`}>
+                <div className="ghost-body you defeated" style={{ boxShadow: `0 0 15px ${avatar.yourAuraColor}40` }}>{yourEmoji}</div>
+                <span className="ghost-label">{avatar.yourCharacterName}</span>
+              </div>
+              <div className="battle-vs">VS</div>
+              <div className="battle-char">
+                <div className="ghost-body ghost taunting" style={{ background: `${avatar.ghostAuraColor}20` }}>{ghostEmoji}</div>
+                <span className="ghost-label" style={{ opacity: 0.6 }}>{avatar.ghostCharacterName}</span>
+              </div>
+            </div>
+            <div className="battle-result">
+              <h3>💀 GHOST WINS</h3>
+              <p>Yesterday&apos;s you beat today&apos;s you. Rematch time.</p>
+            </div>
+          </>
+        ) : (
+          <div className="battle-result">
+            <div style={{ fontSize: 48, marginBottom: 12 }}>👻</div>
+            <h3>Your ghost is waiting to be created</h3>
+            <p>Complete today&apos;s workout to summon it</p>
+          </div>
+        )}
+
+        {/* Ghost Taunt - Upgrade 6 */}
+        {taunt && <div className="taunt-bubble">{taunt}</div>}
+
+        {!isRest && (
+          <Link href="/workout" className="btn-primary" style={{ marginTop: 12, textDecoration: 'none' }}>
+            {allDone ? 'REVISIT WORKOUT' : battleResult === 'loss' ? 'GET REVENGE →' : battleResult === 'win' ? 'START TODAY\'S BATTLE' : 'START WORKOUT'}
+          </Link>
+        )}
+      </div>
+
+      {/* Today's workout preview — hero card */}
+      {today && !today.isRest && (
+        <div className="today-hero-card">
+          {/* Hero image */}
+          <div className="today-hero-img-wrap">
+            {WORKOUT_FOCUS_IMAGES[today.focus] && (
+              <img
+                src={WORKOUT_FOCUS_IMAGES[today.focus]}
+                alt={today.focus}
+                className="today-hero-img"
+              />
+            )}
+            <div className="today-hero-gradient" />
+            <div className="today-hero-chip">TODAY</div>
+            <div className="today-hero-meta">
+              <h2 className="today-hero-focus">{today.focus}</h2>
+              <div className="today-hero-stats">
+                <span>🏋️ {today.exercises.length} exercises</span>
+                <span>⏱ ~{today.exercises.length * 8} mins</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Exercise list */}
+          <div className="today-hero-body">
+            {today.exercises.slice(0, 3).map((ex, i) => (
+              <div className="today-hero-ex" key={ex.name} style={{ opacity: completed.has(ex.name) ? 0.55 : 1 }}>
+                <div className="today-hero-num">
+                  {completed.has(ex.name) ? '✓' : i + 1}
+                </div>
+                <span className="today-hero-name">{ex.name}</span>
+                <span className="today-hero-badge">
+                  {ex.type === 'cardio'
+                    ? `${Math.round((ex.durationSeconds || 0) / 60)}m`
+                    : `${ex.sets}×${ex.reps}`}
+                </span>
+              </div>
+            ))}
+            {today.exercises.length > 3 && (
+              <p className="today-hero-more">+{today.exercises.length - 3} more exercises</p>
+            )}
+            <Link
+              href="/workout"
+              className="today-hero-start"
+              style={{ textDecoration: 'none' }}
+            >
+              {allDone ? 'Revisit Workout ✓' : 'Start Workout 🚀'}
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Week chips */}
+      <div className="week-row">
+        {DAYS.map((d, i) => {
+          const isToday = new Date().getDay() === i;
+          const isDone = completedDays.has(i);
+          const isSunday = i === 0;
+          return (
+            <div className="day-chip" key={d}>
+              <div className={`day-dot ${isToday ? 'today' : ''} ${isDone ? 'done' : ''} ${isSunday && !isDone ? 'rest' : ''}`}>
+                {isDone ? '✓' : isSunday ? '😴' : ''}
+              </div>
+              {d}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ textAlign: 'center', marginBottom: 40 }}>
+        <Link href="/plan" style={{ fontSize: 12, color: 'var(--text2)', textDecoration: 'none', letterSpacing: 0.5 }}>
+          My Plan ✏️
+        </Link>
+      </div>
+
+      {/* Bottom nav */}
+      <nav className="nav">
+        <Link href="/" className="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          HOME
+        </Link>
+        <Link href="/history" className="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          HISTORY
+        </Link>
+        <Link href="/profile" className="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          PROFILE
+        </Link>
+      </nav>
+    </>
+  );
+}
+
+function getGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+

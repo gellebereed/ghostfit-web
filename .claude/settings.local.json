@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(netstat -ano)",
+      "Bash(findstr \":3001\")",
+      "Bash(grep -r \"share\\\\|screenshot\\\\|capture\" /c/Training/Projects/GYM Application/ghostfit-web/src --include=*.tsx --include=*.ts)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(findstr \"LISTENING\")"
+    ]
+  }
+}
