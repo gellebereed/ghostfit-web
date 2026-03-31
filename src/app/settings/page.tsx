@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getProfile, saveProfile, savePlan } from '@/lib/db';
 import { getAppSettings, saveSettings } from '@/lib/sound';
+import { supabase } from '@/lib/supabase';
 
 const GOALS = [
   { id: 'shredded', icon: '🔥', title: 'Get Shredded' },
@@ -21,6 +22,8 @@ export default function SettingsPage() {
   const [restStretch, setRestStretch] = useState(true);
   const [showGoalPicker, setShowGoalPicker] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [resetting, setResetting] = useState(false);
   const [showRegenConfirm, setShowRegenConfirm] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
 
@@ -81,12 +84,30 @@ export default function SettingsPage() {
   }
 
   async function resetAll() {
-    if (typeof window !== 'undefined') {
-      const dbs = await indexedDB.databases?.();
-      if (dbs) dbs.forEach(db => { if (db.name) indexedDB.deleteDatabase(db.name); });
+    if (resetConfirmText !== 'DELETE') return;
+    setResetting(true);
+    try {
+      // Delete all Supabase data for this user
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      if (userId) {
+        await supabase.from('ghost_sessions').delete().eq('user_id', userId);
+        await supabase.from('workout_plans').delete().eq('user_id', userId);
+        await supabase.from('profiles').delete().eq('id', userId);
+        // Delete avatar storage
+        const { data: files } = await supabase.storage.from('avatars').list(userId);
+        if (files && files.length > 0) {
+          await supabase.storage.from('avatars').remove(files.map((f: { name: string }) => `${userId}/${f.name}`));
+        }
+      }
+      // Sign out + clear local
+      await supabase.auth.signOut();
       localStorage.clear();
       sessionStorage.clear();
-      router.replace('/onboarding');
+      window.location.href = '/login';
+    } catch (err) {
+      console.error('Reset error:', err);
+      setResetting(false);
     }
   }
 
@@ -196,11 +217,24 @@ export default function SettingsPage() {
       {showResetConfirm && (
         <div className="dialog-overlay">
           <div className="dialog">
-            <h3>⚠️ Reset Everything?</h3>
-            <p>This will delete all workout data, battle history, and settings. This cannot be undone.</p>
+            <h3>⚠️ Delete Everything?</h3>
+            <p style={{ marginBottom: 12 }}>This will <strong>permanently delete</strong> all your workout data, battle history, equipment, avatar, and settings from both your device and the cloud.</p>
+            <p style={{ marginBottom: 12, fontSize: 13, color: 'var(--text2)' }}>Type <strong style={{ color: 'var(--loss-red)' }}>DELETE</strong> below to confirm:</p>
+            <input
+              className="auth-input"
+              placeholder="Type DELETE to confirm"
+              value={resetConfirmText}
+              onChange={e => setResetConfirmText(e.target.value.toUpperCase())}
+              style={{ marginBottom: 16, textAlign: 'center', letterSpacing: 4, fontWeight: 800 }}
+            />
             <div className="dialog-btns">
-              <button className="keep" onClick={() => setShowResetConfirm(false)}>Cancel</button>
-              <button className="give-up" onClick={resetAll}>Reset All</button>
+              <button className="keep" onClick={() => { setShowResetConfirm(false); setResetConfirmText(''); }}>Cancel</button>
+              <button
+                className="give-up"
+                onClick={resetAll}
+                disabled={resetConfirmText !== 'DELETE' || resetting}
+                style={{ opacity: resetConfirmText !== 'DELETE' ? 0.4 : 1 }}
+              >{resetting ? 'Deleting...' : 'Delete All'}</button>
             </div>
           </div>
         </div>

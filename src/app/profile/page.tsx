@@ -1,17 +1,15 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { getWinCount, getStreak, getAllSessions, getProfile } from '@/lib/db';
 import { calculateTier, getTierLabel, TIER_THRESHOLDS } from '@/lib/types';
-import { getAvatarPrefs, getCharEmoji } from '@/lib/avatar';
+import { getAvatarPrefs, CHARACTER_STYLES } from '@/lib/avatar';
 import { EQUIPMENT_ICONS } from '@/lib/equipment-icons';
 import { supabase } from '@/lib/supabase';
 
-async function signOut() {
-  await supabase.auth.signOut();
-}
-
 export default function ProfilePage() {
+  const router = useRouter();
   const [wins, setWins] = useState(0);
   const [losses, setLosses] = useState(0);
   const [streak, setStreakVal] = useState(0);
@@ -19,6 +17,7 @@ export default function ProfilePage() {
   const [tier, setTier] = useState(1);
   const [goal, setGoal] = useState('');
   const [equipment, setEquipment] = useState<string[]>([]);
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -34,7 +33,23 @@ export default function ProfilePage() {
     if (profile) { setGoal(profile.goal); setEquipment(profile.equipment); }
   }
 
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await supabase.auth.signOut();
+      // Clear all local caches
+      localStorage.clear();
+      sessionStorage.clear();
+      // Force redirect to login
+      window.location.href = '/login';
+    } catch (err) {
+      console.error('Sign out error:', err);
+      setSigningOut(false);
+    }
+  }
+
   const avatar = getAvatarPrefs();
+  const hasPhoto = avatar.yourUsesPhoto && avatar.yourPhotoUrl;
   const nextTierThreshold = TIER_THRESHOLDS[tier] || 25;
   const prevTierThreshold = TIER_THRESHOLDS[tier - 1] || 0;
   const progress = tier >= 5 ? 100 : Math.min(100, ((wins - prevTierThreshold) / (nextTierThreshold - prevTierThreshold)) * 100);
@@ -46,15 +61,16 @@ export default function ProfilePage() {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
         </Link>
         <span style={{ fontSize: 16, fontWeight: 800 }}>Profile</span>
-        {/* Upgrade 4: Settings gear icon */}
         <Link href="/settings" style={{ color: 'var(--text2)' }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </Link>
       </header>
 
       <div className="profile-header">
-        <div className={`profile-char t${tier}`} style={{ background: avatar.yourAuraColor, boxShadow: `0 0 30px ${avatar.yourAuraColor}40` }}>
-          {getCharEmoji(avatar.yourCharacterStyle)}
+        <div className={`profile-char t${tier}`} style={{ background: avatar.yourAuraColor, boxShadow: `0 0 30px ${avatar.yourAuraColor}40`, overflow: 'hidden' }}>
+          {hasPhoto
+            ? <img src={avatar.yourPhotoUrl!} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : (CHARACTER_STYLES.find(c => c.id === avatar.yourCharacterStyle)?.emoji || '💪')}
         </div>
         <div className="profile-tier">Tier {tier} {getTierLabel(tier)}</div>
         <div className="profile-tier-bar">
@@ -65,7 +81,6 @@ export default function ProfilePage() {
         </p>
       </div>
 
-      {/* Upgrade 3: Customize Avatar card */}
       <div style={{ padding: '0 20px', marginBottom: 16 }}>
         <Link href="/avatar" className="settings-row" style={{ textDecoration: 'none' }}>
           <div className="row-left">🎨 Customize Avatar</div>
@@ -92,7 +107,6 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* Upgrade 1: Equipment Image Cards */}
       {equipment.length > 0 && (
         <div style={{ padding: '0 20px' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>Equipment</div>
@@ -109,11 +123,10 @@ export default function ProfilePage() {
         </div>
       )}
 
-
       {/* Sign Out */}
       <div style={{ padding: '16px 20px 28px' }}>
-        <button onClick={signOut} className="auth-signout-btn">
-          Sign Out
+        <button onClick={handleSignOut} className="auth-signout-btn" disabled={signingOut}>
+          {signingOut ? 'Signing out...' : 'Sign Out'}
         </button>
       </div>
 
