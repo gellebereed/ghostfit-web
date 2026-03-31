@@ -245,20 +245,81 @@ a{color:inherit;text-decoration:none;}
 .gif-premium .gif-badge p{color:#fff;font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;margin:0;}
 
 /* ---- EXERCISE / BATTLE SCREEN ---- */
-.battle-page{min-height:100dvh;background:var(--bg);}
-.arena{margin:0 20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;min-height:200px;position:relative;overflow:hidden;}
-.arena-bg{position:absolute;inset:0;opacity:0.05;background:repeating-linear-gradient(90deg,transparent,transparent 20px,var(--accent) 20px,var(--accent) 21px);animation:scrollBg 3s linear infinite;}
-@keyframes scrollBg{to{transform:translateX(-21px);}}
-.arena-chars{display:flex;align-items:flex-end;justify-content:space-between;position:relative;z-index:1;padding:20px 10px 0;}
-.arena-char{display:flex;flex-direction:column;align-items:center;gap:6px;}
-.arena-counter{font-size:28px;font-weight:900;line-height:1;}
-.arena-counter.green{color:var(--accent);}
-.arena-counter.gray{color:var(--text3);}
-.arena-speech{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:11px;position:absolute;top:0;white-space:nowrap;}
-.arena.shake{animation:shake 0.3s ease;}
+/* ---- FIGHTER ARENA — GAMIFIED ---- */
+.fighter-arena{margin:0 16px;background:linear-gradient(180deg,#0D1117,#111820);border:1px solid rgba(255,255,255,0.06);border-radius:16px;min-height:200px;position:relative;overflow:hidden;padding-bottom:12px;}
+.fighter-arena.shake{animation:shake 0.3s ease;}
 @keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-3px);}75%{transform:translateX(3px);}}
 .arena-flash{position:absolute;inset:0;background:var(--accent);opacity:0;z-index:10;pointer-events:none;animation:flash 0.5s ease;}
 @keyframes flash{0%{opacity:0.4;}100%{opacity:0;}}
+
+/* Health Bars */
+.hb-row{display:flex;gap:8px;padding:12px 12px 0;}
+.hb-col{flex:1;}
+.hb-labels{display:flex;justify-content:space-between;margin-bottom:4px;}
+.hb-name{font-size:9px;font-weight:900;letter-spacing:3px;text-transform:uppercase;}
+.hb-name.green{color:var(--accent);}
+.hb-name.ghost-name{color:#666;}
+.hb-pct{font-size:9px;font-weight:700;}
+.hb-pct.green{color:var(--accent);}
+.hb-ghost-info{font-size:9px;font-weight:700;color:#666;}
+.hb-vs{display:flex;align-items:center;padding:0 4px;font-size:10px;font-weight:900;color:#555;}
+.hb-track{height:8px;background:#1A1A1A;border-radius:99px;overflow:hidden;}
+.hb-fill{height:100%;border-radius:99px;transition:width 0.5s cubic-bezier(0.4,0,0.2,1);}
+.hb-fill.ghost-fill{background:linear-gradient(270deg,#666,#555);}
+
+/* Fighters Row */
+.fighters-row{display:flex;align-items:flex-end;justify-content:space-between;padding:16px 24px 4px;}
+
+/* Fighter Card Wrapper */
+.fighter-card-wrap{display:flex;flex-direction:column;align-items:center;transition:transform 0.2s;}
+.fighter-card-wrap.fc-scored{transform:scale(1.1);}
+
+/* Score */
+.fc-score{font-size:36px;font-weight:900;line-height:1;margin-bottom:4px;transition:font-size 0.15s;}
+.fc-score.green{color:var(--accent);}
+.fc-score.gray{color:#666;}
+
+/* Fighter Card */
+.fc-card{position:relative;width:80px;height:90px;border-radius:16px;border:2px solid;overflow:hidden;transition:box-shadow 0.3s,opacity 0.3s;}
+.fc-avatar{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:16px;overflow:hidden;}
+.fc-photo{width:100%;height:100%;object-fit:cover;}
+.fc-photo.ghost-photo{opacity:0.6;filter:grayscale(30%);}
+
+/* Score flash */
+.fc-flash{position:absolute;inset:0;border-radius:16px;background:rgba(0,255,135,0.2);animation:fc-ping 0.4s ease-out;pointer-events:none;}
+@keyframes fc-ping{0%{opacity:1;transform:scale(1);}100%{opacity:0;transform:scale(1.2);}}
+
+/* Tier badge */
+.fc-tier-badge{position:absolute;bottom:-3px;right:-3px;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:#0A0A0A;border:2px solid #0A0A0A;z-index:2;}
+
+/* Defeated overlay */
+.fc-defeated{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:16px;background:rgba(0,0,0,0.4);font-size:24px;z-index:1;}
+
+/* Label */
+.fc-label{margin-top:8px;font-size:10px;font-weight:900;letter-spacing:3px;text-transform:uppercase;}
+.fc-label.green{color:var(--accent);}
+.fc-label.ghost-label{color:#666;}
+
+/* Center Status */
+.fighter-center{display:flex;flex-direction:column;align-items:center;gap:4px;padding-bottom:24px;}
+.fc-dots{display:flex;flex-direction:column;gap:6px;align-items:center;}
+.fc-dot{width:4px;height:4px;border-radius:50%;background:#555;}
+.fc-status-pulse{display:flex;flex-direction:column;align-items:center;animation:status-pulse 1.5s ease infinite;}
+@keyframes status-pulse{0%,100%{opacity:1;}50%{opacity:0.6;}}
+.fc-status-text{font-size:10px;font-weight:900;letter-spacing:3px;}
+.fc-status-text.green{color:var(--accent);}
+.fc-status-text.yellow{color:#FFB800;}
+.fc-status-icon{font-size:18px;}
+.fc-status-icon.dim{opacity:0.5;}
+.fc-status-behind{display:flex;flex-direction:column;align-items:center;gap:2px;}
+.fc-behind-text{font-size:9px;font-weight:700;color:#666;letter-spacing:2px;}
+
+/* First time message */
+.fc-first-time{text-align:center;padding:0 0 8px;font-size:10px;letter-spacing:3px;text-transform:uppercase;font-weight:700;color:#555;}
+
+/* Arena floor line */
+.arena-floor{position:absolute;bottom:32px;left:16px;right:16px;height:1px;background:linear-gradient(to right,transparent,rgba(255,255,255,0.1),transparent);}
+
 
 .ex-detail{padding:16px 20px;}
 .ex-detail h2{font-size:20px;font-weight:800;margin-bottom:8px;}

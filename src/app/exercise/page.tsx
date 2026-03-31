@@ -35,6 +35,7 @@ function ExerciseContent() {
   const [result, setResult] = useState<'win' | 'loss' | 'first' | null>(null);
   const [arenaShake, setArenaShake] = useState(false);
   const [flash, setFlash] = useState(false);
+  const [justScored, setJustScored] = useState(false);
 
   // Upgrade 2: GIF state
   const [gifUrl, setGifUrl] = useState<string | null>(null);
@@ -141,6 +142,8 @@ function ExerciseContent() {
     setSetsCompleted(prev => prev + 1);
     playSetComplete();
     hapticSetComplete();
+    setJustScored(true);
+    setTimeout(() => setJustScored(false), 400);
 
     if (ghost && totalReps + r > ghost.totalReps) {
       setFlash(true);
@@ -301,36 +304,137 @@ function ExerciseContent() {
           <div style={{ width: 20 }} />
         </header>
 
-        {/* Arena with avatar colors */}
-        <div className={`arena ${arenaShake ? 'shake' : ''}`}>
+        {/* ===== GAMIFIED FIGHTER ARENA ===== */}
+        <div className={`fighter-arena ${arenaShake ? 'shake' : ''}`}>
           {flash && <div className="arena-flash" />}
-          <div className="arena-bg" />
-          <div className="arena-chars">
-            <div className="arena-char">
-              <div className="arena-counter green">{isCardio ? formatTime(seconds) : totalReps}</div>
-              <div className="ghost-body you" style={{ width: 50, height: 50, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, background: avatar.yourAuraColor, boxShadow: `0 0 15px ${avatar.yourAuraColor}40`, animation: ahead ? 'celebrate 0.5s ease infinite alternate' : undefined, overflow: 'hidden' }}>
-                {avatar.yourUsesPhoto && avatar.yourPhotoUrl
-                  ? <img src={avatar.yourPhotoUrl} alt="You" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : yourEmoji}
+
+          {/* Health Bars */}
+          <div className="hb-row">
+            <div className="hb-col">
+              <div className="hb-labels">
+                <span className="hb-name green">{avatar.yourCharacterName}</span>
+                <span className="hb-pct green">
+                  {ghost ? `${Math.round(Math.min((myScore / Math.max(ghostTarget, 1)) * 100, 100))}%` : '—'}
+                </span>
               </div>
-              <span className="ghost-label">{avatar.yourCharacterName}</span>
+              <div className="hb-track">
+                <div className="hb-fill" style={{
+                  width: `${ghost ? Math.min((myScore / Math.max(ghostTarget, myScore, 1)) * 100, 100) : (myScore > 0 ? 100 : 0)}%`,
+                  background: ahead || !ghost ? 'linear-gradient(90deg, #00FF87, #00CC6A)' : 'linear-gradient(90deg, #FFB800, #FF8C00)'
+                }} />
+              </div>
             </div>
-
-            <div className="battle-vs">VS</div>
-
-            <div className="arena-char" style={{ position: 'relative' }}>
-              {ghost && !ahead && !tied && <div className="arena-speech" style={{ right: -10 }}>Beat that 💪</div>}
-              {ghost && tied && <div className="arena-speech" style={{ right: -10 }}>Wait—</div>}
-              {ghost && ahead && <div className="arena-speech" style={{ right: -10 }}>Oh no—</div>}
-              <div className="arena-counter gray">{ghost ? (isCardio ? formatTime(ghost.totalDuration) : ghost.totalReps) : '—'}</div>
-              <div className="ghost-body ghost" style={{ width: 50, height: 50, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, background: `${avatar.ghostAuraColor}30`, opacity: ahead ? 0.3 : 0.7, animation: !ahead && ghost ? 'taunt 1.5s ease infinite' : undefined, overflow: 'hidden' }}>
-                {avatar.ghostUsesPhoto && avatar.ghostPhotoUrl
-                  ? <img src={avatar.ghostPhotoUrl} alt="Ghost" style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'grayscale(20%) blur(0.3px)' }} />
-                  : ghostEmoji}
+            <div className="hb-vs">VS</div>
+            <div className="hb-col">
+              <div className="hb-labels">
+                <span className="hb-ghost-info">{ghost ? (isCardio ? formatTime(ghostTarget) : `${ghostTarget} target`) : 'NO DATA'}</span>
+                <span className="hb-name ghost-name">{avatar.ghostCharacterName}</span>
               </div>
-              <span className="ghost-label" style={{ opacity: 0.6 }}>{avatar.ghostCharacterName}</span>
+              <div className="hb-track">
+                <div className="hb-fill ghost-fill" style={{ width: ghost ? '100%' : '0%' }} />
+              </div>
             </div>
           </div>
+
+          {/* Fighters Row */}
+          <div className="fighters-row">
+            {/* YOUR FIGHTER */}
+            <div className={`fighter-card-wrap ${justScored ? 'fc-scored' : ''}`}>
+              <div className="fc-score green">{isCardio ? formatTime(seconds) : totalReps}</div>
+              <div className="fc-card" style={{
+                background: 'linear-gradient(135deg, #0D1F0D, #141414)',
+                borderColor: tier >= 4 ? '#FFD700' : '#00FF87',
+                boxShadow: (ahead || justScored)
+                  ? `0 0 20px ${tier >= 4 ? 'rgba(255,215,0,0.3)' : 'rgba(0,255,135,0.25)'}, inset 0 0 15px ${tier >= 4 ? 'rgba(255,215,0,0.15)' : 'rgba(0,255,135,0.15)'}` : 'none',
+              }}>
+                <div className="fc-avatar">
+                  {avatar.yourUsesPhoto && avatar.yourPhotoUrl ? (
+                    <img src={avatar.yourPhotoUrl} alt="You" className="fc-photo" />
+                  ) : (
+                    <svg viewBox="0 0 60 70" width="60" height="70" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="30" cy="16" r="10" fill={tier >= 4 ? '#FFD700' : '#00FF87'} opacity="0.9"/>
+                      <circle cx="27" cy="15" r="2" fill="#0A0A0A"/>
+                      <circle cx="33" cy="15" r="2" fill="#0A0A0A"/>
+                      <path d={ahead || justScored ? 'M 26 19 Q 30 22 34 19' : 'M 26 19 Q 30 20 34 19'} stroke="#0A0A0A" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+                      <rect x="20" y="28" width="20" height="20" rx="4" fill={tier >= 4 ? '#FFD700' : '#00FF87'} opacity="0.8"/>
+                      <rect x="8" y="28" width="10" height="6" rx="3" fill={tier >= 4 ? '#FFD700' : '#00FF87'} opacity="0.8"
+                        transform={ahead || justScored ? 'rotate(-30, 13, 31)' : 'rotate(0)'}/>
+                      <rect x="42" y="28" width="10" height="6" rx="3" fill={tier >= 4 ? '#FFD700' : '#00FF87'} opacity="0.8"/>
+                      <rect x="21" y="46" width="7" height="14" rx="3" fill={tier >= 4 ? '#FFD700' : '#00FF87'} opacity="0.7"/>
+                      <rect x="32" y="46" width="7" height="14" rx="3" fill={tier >= 4 ? '#FFD700' : '#00FF87'} opacity="0.7"/>
+                      {tier >= 5 && <text x="30" y="8" textAnchor="middle" fontSize="8">👑</text>}
+                    </svg>
+                  )}
+                </div>
+                {justScored && <div className="fc-flash" />}
+                <div className="fc-tier-badge" style={{ background: tier >= 4 ? '#FFD700' : '#00FF87' }}>{tier}</div>
+              </div>
+              <div className="fc-label green">{avatar.yourCharacterName}</div>
+            </div>
+
+            {/* CENTER STATUS */}
+            <div className="fighter-center">
+              {myScore === 0 && ghostTarget === 0 ? (
+                <div className="fc-dots"><div className="fc-dot" /><div className="fc-dot" /><div className="fc-dot" /></div>
+              ) : ahead ? (
+                <div className="fc-status-pulse">
+                  <span className="fc-status-text green">WINNING</span>
+                  <span className="fc-status-icon">⚡</span>
+                </div>
+              ) : tied ? (
+                <div className="fc-status-pulse">
+                  <span className="fc-status-text yellow">TIED</span>
+                  <span className="fc-status-icon">🔥</span>
+                </div>
+              ) : (
+                <div className="fc-status-behind">
+                  <span className="fc-behind-text">{ghostTarget - myScore} back</span>
+                  <span className="fc-status-icon dim">👻</span>
+                </div>
+              )}
+            </div>
+
+            {/* GHOST FIGHTER */}
+            <div className="fighter-card-wrap">
+              <div className="fc-score gray">{ghost ? (isCardio ? formatTime(ghost.totalDuration) : ghost.totalReps) : '—'}</div>
+              <div className="fc-card ghost-card" style={{
+                background: 'linear-gradient(135deg, #1A1A2E, #141414)',
+                borderColor: 'rgba(255,255,255,0.15)',
+                opacity: ahead ? 0.4 : 0.7,
+                boxShadow: !ahead && ghost ? '0 0 15px rgba(255,255,255,0.05)' : 'none',
+              }}>
+                <div className="fc-avatar">
+                  {avatar.ghostUsesPhoto && avatar.ghostPhotoUrl ? (
+                    <img src={avatar.ghostPhotoUrl} alt="Ghost" className="fc-photo ghost-photo" />
+                  ) : (
+                    <svg viewBox="0 0 60 70" width="60" height="70" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M 15 35 Q 15 15 30 10 Q 45 15 45 35 L 45 60 Q 40 55 35 60 Q 30 55 25 60 Q 20 55 15 60 Z"
+                        fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
+                      <circle cx="25" cy="28" r="4" fill="rgba(255,255,255,0.6)"/>
+                      <circle cx="35" cy="28" r="4" fill="rgba(255,255,255,0.6)"/>
+                      <circle cx="26" cy="29" r="2" fill="#0A0A0A"/>
+                      <circle cx="36" cy="29" r="2" fill="#0A0A0A"/>
+                      {!ahead ? (
+                        <path d="M 24 36 Q 30 40 36 36" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+                      ) : (
+                        <path d="M 24 38 Q 30 34 36 38" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+                      )}
+                    </svg>
+                  )}
+                </div>
+                {ahead && <div className="fc-defeated">💀</div>}
+              </div>
+              <div className="fc-label ghost-label">{avatar.ghostCharacterName}</div>
+            </div>
+          </div>
+
+          {/* First time message */}
+          {!ghost && (
+            <div className="fc-first-time">First time — set your benchmark 👻</div>
+          )}
+
+          {/* Arena floor line */}
+          <div className="arena-floor" />
         </div>
 
         {/* Exercise info */}
