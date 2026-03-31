@@ -32,6 +32,7 @@ export default function PlanPage() {
       await savePlan({ ...plan, createdAt: Date.now() });
       await saveProfile({
         equipment, goal, currentWeek: 1, onboardingComplete: true, createdAt: Date.now(),
+        soulCoins: 0, unlockedCosmetics: [], equippedCosmetics: {},
       });
 
       sessionStorage.removeItem('ghostfit_equipment');

@@ -141,6 +141,11 @@ export default function EquipmentEditorPage() {
             <h3>Upload Photo</h3>
             <p>Choose from gallery</p>
           </div>
+          <div className="onb-option" onClick={() => { setShowAddSheet(true); setSearch(''); }}>
+            <div className="icon">☰</div>
+            <h3>Pick from List</h3>
+            <p>Select manually</p>
+          </div>
         </div>
 
         <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="camera-input" onChange={handlePhoto} />

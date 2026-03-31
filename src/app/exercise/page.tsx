@@ -1,11 +1,23 @@
 'use client';
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { getCurrentPlan, getGhostForExercise, saveGhostSession, getWinCount, getAllSessions, getCachedExercise, cacheExercise, getStreak, getAllTimeBest, updateCachedVideoId, getProfile } from '@/lib/db';
+import { getCurrentPlan, getGhostForExercise, saveGhostSession, getWinCount, getAllSessions, getCachedExercise, cacheExercise, getStreak, getAllTimeBest, updateCachedVideoId, getProfile, awardSoulCoins } from '@/lib/db';
 import { Exercise, GhostSession, ExerciseInfo, calculateTier } from '@/lib/types';
 import { getAvatarPrefs, getCharEmoji } from '@/lib/avatar';
 import { checkMilestones, MilestoneEvent } from '@/lib/milestones';
 import { playSetComplete, playGhostBeaten, playGiveUp, playMilestone, hapticSetComplete, hapticGhostBeaten, hapticGiveUp, hapticMilestone } from '@/lib/sound';
+import { arcadeSounds, initAudio } from '@/utils/arcadeSounds';
+
+function ComboAnnouncer({ combo }: { combo: number | null }) {
+  if (!combo || combo < 2) return null;
+  const text = combo === 2 ? 'COMBO x2!' : combo === 3 ? 'COMBO x3! 🔥' : 'UNSTOPPABLE! ⚡';
+  const color = combo === 2 ? 'text-yellow-400' : combo === 3 ? 'text-orange-400' : 'text-red-400';
+  return (
+    <div className={`absolute top-4 left-0 right-0 text-center font-black text-xl ${color} animate-bounce pointer-events-none z-50`} style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}>
+      {text}
+    </div>
+  );
+}
 
 function getInitiationBenchmark(
   exerciseName: string,
@@ -102,7 +114,16 @@ function ExerciseContent() {
   const [milestone, setMilestone] = useState<MilestoneEvent | null>(null);
   const [totalWinsBefore, setTotalWinsBefore] = useState(0);
 
+  // RPG Layer: Coins & Combos & Sounds
+  const [unlockedCosmetics, setUnlockedCosmetics] = useState<string[]>([]);
+  const [coinAnim, setCoinAnim] = useState<number | null>(null);
+  const [showCombo, setShowCombo] = useState<number | null>(null);
+  const comboTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+
   useEffect(() => {
+    document.addEventListener('pointerdown', initAudio, { once: true });
+    setSoundEnabled(localStorage.getItem('ghostfit_sound_enabled') !== 'false');
     load();
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, []);
@@ -132,6 +153,8 @@ function ExerciseContent() {
         } as any;
       }
       setGhost(g);
+      const profile = await getProfile();
+      if (profile) setUnlockedCosmetics(profile.unlockedCosmetics || []);
       const wc = await getWinCount();
       setTotalWinsBefore(wc);
       setTier(calculateTier(wc));
@@ -208,8 +231,14 @@ function ExerciseContent() {
     setSetsCompleted(prev => prev + 1);
     playSetComplete();
     hapticSetComplete();
+    if (soundEnabled) arcadeSounds.setComplete();
     setJustScored(true);
     setTimeout(() => setJustScored(false), 400);
+
+    const newCombo = currentSet;
+    setShowCombo(newCombo);
+    if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
+    comboTimerRef.current = setTimeout(() => setShowCombo(null), 1200);
 
     if (ghost && totalReps + r > ghost.totalReps) {
       setFlash(true);
@@ -271,7 +300,16 @@ function ExerciseContent() {
     };
     await saveGhostSession(session);
 
-    if (won) { playGhostBeaten(); hapticGhostBeaten(); }
+    const margin = ghostTarget > 0 ? ((myScore - ghostTarget) / ghostTarget) * 100 : 50;
+    const earned = await awardSoulCoins(res === 'first' ? 'win' : res, margin);
+    if (earned > 0) {
+      setCoinAnim(earned);
+      if (soundEnabled) arcadeSounds.coinEarned();
+      setTimeout(() => setCoinAnim(null), 1500);
+    }
+
+    if (won) { playGhostBeaten(); hapticGhostBeaten(); if (soundEnabled) arcadeSounds.ghostBeaten(); }
+    if (isNewPR && soundEnabled) arcadeSounds.newRecord();
 
     // Check milestones (Upgrade 8)
     const allSessions = await getAllSessions();
@@ -301,7 +339,6 @@ function ExerciseContent() {
     setResult(res);
   }, [exercise, ghost, seconds, tier, weights]);
 
-  // Give up
   async function handleGiveUp() {
     if (!exercise) return;
     const session: GhostSession = {
@@ -310,7 +347,16 @@ function ExerciseContent() {
       totalDuration: seconds, setsCompleted, result: 'loss', characterTier: tier,
     };
     await saveGhostSession(session);
+    
+    const earned = await awardSoulCoins('loss', 0);
+    if (earned > 0) {
+      setCoinAnim(earned);
+      if (soundEnabled) arcadeSounds.coinEarned();
+      setTimeout(() => setCoinAnim(null), 1500);
+    }
+
     playGiveUp(); hapticGiveUp();
+    if (soundEnabled) arcadeSounds.giveUp();
     setResult('loss');
     setShowGiveUp(false);
   }
@@ -326,6 +372,28 @@ function ExerciseContent() {
   const yourEmoji = getCharEmoji(avatar.yourCharacterStyle);
   const ghostEmoji = getCharEmoji(avatar.ghostCharacterStyle);
   const instrToShow = showAllInstr ? instructions : instructions.slice(0, 2);
+
+  // RPG Cosmetics Setup
+  const auraColor = (() => {
+    if (unlockedCosmetics.includes('aura_fire')) return 'rgba(255,107,53,0.5)';
+    if (unlockedCosmetics.includes('aura_ice')) return 'rgba(0,212,255,0.4)';
+    if (unlockedCosmetics.includes('aura_lightning')) return 'rgba(255,215,0,0.45)';
+    if (unlockedCosmetics.includes('aura_gold')) return 'rgba(255,215,0,0.6)';
+    return tier >= 4 ? '#FFD700' : '#00FF87';
+  })();
+  const headgear = (() => {
+    if (unlockedCosmetics.includes('head_crown')) return '👑';
+    if (unlockedCosmetics.includes('head_ninja')) return '🥷';
+    if (unlockedCosmetics.includes('head_horns')) return '😈';
+    return null;
+  })();
+  const badge = (() => {
+    if (unlockedCosmetics.includes('badge_skull')) return '💀';
+    if (unlockedCosmetics.includes('badge_streak')) return '🔥';
+    return null;
+  })();
+  const glitchClass = unlockedCosmetics.includes('effect_glitch') ? 'animate-glitch' : '';
+  const rainbowClass = unlockedCosmetics.includes('effect_rainbow') ? 'fc-rainbow' : '';
 
   return (
     <>
@@ -377,6 +445,13 @@ function ExerciseContent() {
         {/* ===== GAMIFIED FIGHTER ARENA ===== */}
         <div className={`fighter-arena ${arenaShake ? 'shake' : ''}`}>
           {flash && <div className="arena-flash" />}
+          
+          {coinAnim !== null && (
+            <div className="absolute top-4 right-4 animate-bounce text-[#00FF87] font-black text-sm pointer-events-none z-50">
+              +{coinAnim} ⚡
+            </div>
+          )}
+          <ComboAnnouncer combo={showCombo} />
 
           {/* Health Bars */}
           <div className="hb-row">
@@ -409,13 +484,16 @@ function ExerciseContent() {
           {/* Fighters Row */}
           <div className="fighters-row">
             {/* YOUR FIGHTER */}
-            <div className={`fighter-card-wrap ${justScored ? 'fc-scored' : ''}`}>
+            <div className={`fighter-card-wrap ${justScored ? 'fc-scored' : ''} ${rainbowClass}`} style={{ position: 'relative' }}>
+              {headgear && <div className="absolute top-0 left-1/2 text-2xl z-20" style={{ transform: 'translate(-50%, -60%)' }}>{headgear}</div>}
+              {badge && <div className="absolute bottom-0 right-0 text-sm z-20 bg-[#141414] rounded-full border border-gray-700 shadow-lg" style={{ padding: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, transform: 'translate(40%, 40%)' }}>{badge}</div>}
+
               <div className="fc-score green">{isCardio ? formatTime(seconds) : totalReps}</div>
-              <div className="fc-card" style={{
+              <div className={`fc-card your-card ${glitchClass}`} style={{
                 background: 'linear-gradient(135deg, #0D1F0D, #141414)',
-                borderColor: tier >= 4 ? '#FFD700' : '#00FF87',
+                borderColor: auraColor,
                 boxShadow: (ahead || justScored)
-                  ? `0 0 20px ${tier >= 4 ? 'rgba(255,215,0,0.3)' : 'rgba(0,255,135,0.25)'}, inset 0 0 15px ${tier >= 4 ? 'rgba(255,215,0,0.15)' : 'rgba(0,255,135,0.15)'}` : 'none',
+                  ? `0 0 20px ${auraColor}, inset 0 0 15px ${auraColor}` : 'none',
               }}>
                 <div className="fc-avatar">
                   {avatar.yourUsesPhoto && avatar.yourPhotoUrl ? (

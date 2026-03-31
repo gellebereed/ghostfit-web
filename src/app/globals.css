@@ -596,7 +596,7 @@ button { touch-action: manipulation; user-select: none; }
 .auth-divider span{padding:0 12px;font-size:12px;color:var(--text3);font-family:inherit;text-transform:uppercase;letter-spacing:1px;}
 
 /* PWA Install Banner */
-.install-banner{position:fixed;bottom:calc(env(safe-area-inset-bottom, 20px) + 70px);left:20px;right:20px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 8px 32px rgba(0,0,0,0.5);z-index:9999;animation:slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);}
+.install-banner{position:fixed;bottom:calc(env(safe-area-inset-bottom, 20px) + 85px);left:20px;right:20px;max-width:400px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 8px 32px rgba(0,0,0,0.5);z-index:9999;animation:slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);}
 .install-content{display:flex;align-items:center;gap:12px;}
 .install-content strong{display:block;font-size:14px;color:var(--text);margin-bottom:2px;}
 .install-content p{font-size:12px;color:var(--text2);margin:0;line-height:1.4;}
@@ -619,3 +619,85 @@ button { touch-action: manipulation; user-select: none; }
   opacity: 0.8 !important;
   transition: transform 0.05s, opacity 0.05s !important;
 }
+
+/* ===========================================
+   RPG COSMETICS
+   =========================================== */
+.animate-glitch { animation: glitch 0.5s infinite; }
+@keyframes glitch {
+  0%, 100% { transform: translate(0); filter: hue-rotate(0deg); }
+  20% { transform: translate(-2px, 1px); filter: hue-rotate(90deg); }
+  40% { transform: translate(2px, -1px); filter: hue-rotate(180deg); }
+  60% { transform: translate(-1px, 2px); filter: hue-rotate(270deg); }
+  80% { transform: translate(1px, -2px); filter: hue-rotate(360deg); }
+}
+
+.fc-rainbow { position: relative; }
+.fc-rainbow::after {
+  content: ''; position: absolute; inset: -2px; border-radius: inherit; z-index: -1;
+  background: linear-gradient(90deg, red, orange, yellow, green, blue, purple, red);
+  background-size: 200% 200%;
+  animation: rainbowMove 2s linear infinite;
+}
+@keyframes rainbowMove { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
+
+/* ===========================================
+   SOUL SHOP
+   =========================================== */
+.shop-container { padding-bottom: 80px; }
+.shop-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 20px 16px; margin-top: 10px; }
+.shop-title-area { display: flex; align-items: center; gap: 12px; }
+.shop-title { color: #fff; font-size: 24px; font-weight: 900; margin: 0; }
+.shop-subtitle { color: var(--text2); font-size: 14px; margin: 0; }
+.shop-coin-badge { display: flex; align-items: center; gap: 6px; background: var(--surface); padding: 6px 14px; border-radius: 30px; border: 1px solid rgba(0,255,135,0.2); }
+.shop-coin-icon { font-size: 16px; }
+.shop-coin-amount { color: var(--accent); font-weight: 900; font-size: 16px; }
+.shop-coin-label { color: var(--text3); font-size: 11px; }
+
+.shop-flash { margin: 0 20px 16px; padding: 12px; border-radius: 12px; background: rgba(0,255,135,0.1); border: 1px solid rgba(0,255,135,0.3); color: var(--accent); font-weight: 700; font-size: 14px; text-align: center; animation: pulse 2s infinite; }
+
+.shop-filter-scroll { display: flex; gap: 8px; padding: 0 20px 20px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.shop-filter-scroll::-webkit-scrollbar { display: none; }
+.shop-filter-btn { padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; flex-shrink: 0; background: var(--surface); color: var(--text2); border: none; transition: 0.2s; white-space: nowrap; touch-action: manipulation; }
+.shop-filter-btn.active { background: var(--accent); color: #000; }
+
+.shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 20px; }
+.shop-card { position: relative; background: var(--surface); border-radius: 16px; padding: 16px; border: 1px solid var(--border); display: flex; flex-direction: column; }
+.shop-card.owned { opacity: 0.6; }
+.shop-rarity { font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; margin: 0 0 8px; }
+.shop-preview { font-size: 36px; margin-bottom: 12px; }
+.shop-item-name { color: #fff; font-weight: 700; font-size: 14px; line-height: 1.2; margin: 0 0 4px; }
+.shop-item-desc { color: var(--text3); font-size: 11px; line-height: 1.4; height: 32px; overflow: hidden; margin: 0; }
+
+.shop-buy-btn { width: 100%; margin-top: auto; padding: 10px; border-radius: 10px; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; border: none; touch-action: manipulation; transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.shop-buy-btn.available { background: var(--accent); color: #000; }
+.shop-buy-btn.available:active { transform: scale(0.95); }
+.shop-buy-btn.disabled { background: #1A1A1A; color: var(--text3); }
+.shop-buy-btn.equipped { background: rgba(0,255,135,0.1); color: var(--accent); }
+
+/* Ghost Taunt Animation */
+.taunt-bubble {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-size: 13px;
+  color: var(--text2);
+  margin: 16px 0;
+  position: relative;
+  animation: ghostFloat 3s ease-in-out infinite;
+}
+.taunt-bubble::after {
+  content: ''; position: absolute; top: -8px; left: 24px;
+  border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 8px solid var(--surface2);
+}
+
+@keyframes ghostFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+/* Equipment Card Polish */
+.equip-card { transition: transform 0.1s, border-color 0.2s; cursor: pointer; }
+.equip-card:active { transform: scale(0.96); }
+.equip-card.selected { border-color: var(--accent); background: rgba(0,255,135,0.05); }

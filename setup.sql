@@ -110,3 +110,13 @@ $$;
 create or replace trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- 6. RPG Economy layer
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS soul_coins integer DEFAULT 0;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS unlocked_cosmetics text[] DEFAULT '{}';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS equipped_cosmetics jsonb DEFAULT '{}';
+
+CREATE OR REPLACE FUNCTION add_soul_coins(user_id uuid, amount integer)
+RETURNS void LANGUAGE sql AS $$
+  UPDATE profiles SET soul_coins = GREATEST(0, soul_coins + amount) WHERE id = user_id;
+$$;

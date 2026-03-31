@@ -59,6 +59,9 @@ export async function getProfile(): Promise<UserProfile | null> {
     currentWeek: data.current_week ?? 1,
     onboardingComplete: data.onboarding_complete ?? false,
     createdAt: new Date(data.created_at).getTime(),
+    soulCoins: data.soul_coins ?? 0,
+    unlockedCosmetics: data.unlocked_cosmetics ?? [],
+    equippedCosmetics: data.equipped_cosmetics ?? {},
   };
   localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));
   memoryCache.profile = profile;
@@ -105,8 +108,11 @@ export async function savePlan(plan: WorkoutPlan): Promise<void> {
 export async function getCurrentPlan(): Promise<WorkoutPlan | null> {
   if (memoryCache.plan !== undefined) return memoryCache.plan;
 
+  const CACHE_KEY = 'ghostfit_active_plan';
+  const cached = localStorage.getItem(CACHE_KEY);
+  
   const userId = await uid();
-  if (!userId) return null;
+  if (!userId) return cached ? JSON.parse(cached) : null;
 
   const { data, error } = await supabase
     .from('workout_plans')
@@ -117,12 +123,15 @@ export async function getCurrentPlan(): Promise<WorkoutPlan | null> {
     .limit(1)
     .single();
 
-  if (error || !data) return null;
+  if (error || !data) return cached ? JSON.parse(cached) : null;
+  
   const plan = {
     weekNumber: data.week_number,
     days: data.days,
     createdAt: new Date(data.created_at).getTime(),
   };
+  
+  localStorage.setItem(CACHE_KEY, JSON.stringify(plan));
   memoryCache.plan = plan;
   return plan;
 }
@@ -147,6 +156,14 @@ export async function saveGhostSession(session: GhostSession): Promise<void> {
   });
   
   // Invalidate session-dependent caches
+  const cacheKeys = [
+    'ghostfit_win_count', 
+    'ghostfit_streak', 
+    'ghostfit_yesterday_result', 
+    'ghostfit_active_plan' // In case it's a new plan cycle
+  ];
+  cacheKeys.forEach(k => localStorage.removeItem(k));
+  
   memoryCache.sessions = null;
   memoryCache.winCount = undefined;
   memoryCache.streak = undefined;
@@ -191,8 +208,11 @@ export async function getGhostForExercise(exerciseName: string): Promise<GhostSe
 export async function getWinCount(): Promise<number> {
   if (memoryCache.winCount !== undefined) return memoryCache.winCount;
   
+  const CACHE_KEY = 'ghostfit_win_count';
+  const cached = localStorage.getItem(CACHE_KEY);
+
   const userId = await uid();
-  if (!userId) return 0;
+  if (!userId) return cached ? parseInt(cached) : 0;
 
   const { count, error } = await supabase
     .from('ghost_sessions')
@@ -200,7 +220,9 @@ export async function getWinCount(): Promise<number> {
     .eq('user_id', userId)
     .eq('result', 'win');
 
-  const wc = error ? 0 : (count ?? 0);
+  const wc = error ? (cached ? parseInt(cached) : 0) : (count ?? 0);
+  
+  localStorage.setItem(CACHE_KEY, wc.toString());
   memoryCache.winCount = wc;
   return wc;
 }
@@ -208,7 +230,12 @@ export async function getWinCount(): Promise<number> {
 export async function getStreak(): Promise<number> {
   if (memoryCache.streak !== undefined) return memoryCache.streak;
 
+  const CACHE_KEY = 'ghostfit_streak';
+  const cached = localStorage.getItem(CACHE_KEY);
+
   const sessions = await getAllSessions();
+  if (sessions.length === 0 && cached) return parseInt(cached);
+
   let streak = 0;
   const byDate = new Map<string, GhostSession[]>();
   sessions.forEach(s => {
@@ -223,6 +250,8 @@ export async function getStreak(): Promise<number> {
     if (byDate.get(d)!.some(s => s.result === 'win')) streak++;
     else break;
   }
+  
+  localStorage.setItem(CACHE_KEY, streak.toString());
   memoryCache.streak = streak;
   return streak;
 }
@@ -230,8 +259,11 @@ export async function getStreak(): Promise<number> {
 export async function getYesterdayResult(): Promise<'win' | 'loss' | 'none'> {
   if (memoryCache.yesterdayResult !== undefined) return memoryCache.yesterdayResult;
 
+  const CACHE_KEY = 'ghostfit_yesterday_result';
+  const cached = localStorage.getItem(CACHE_KEY) as 'win' | 'loss' | 'none';
+
   const userId = await uid();
-  if (!userId) return 'none';
+  if (!userId) return cached || 'none';
 
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
@@ -244,10 +276,17 @@ export async function getYesterdayResult(): Promise<'win' | 'loss' | 'none'> {
     .gte('date', new Date(yd).toISOString())
     .lt('date', new Date().toDateString() === yd ? new Date().toISOString() : new Date(yd + ' 23:59:59').toISOString());
 
-  if (!data || data.length === 0) return 'none';
+  if (!data || data.length === 0) {
+    const res = cached || 'none';
+    memoryCache.yesterdayResult = res;
+    return res;
+  }
+
   const wins = data.filter(s => s.result === 'win').length;
   const losses = data.filter(s => s.result !== 'win').length;
   const res = wins >= losses ? 'win' : 'loss';
+  
+  localStorage.setItem(CACHE_KEY, res);
   memoryCache.yesterdayResult = res;
   return res;
 }
@@ -331,4 +370,34 @@ function rowToSession(row: any): GhostSession {
     result: row.result,
     characterTier: row.character_tier ?? 1,
   };
+}
+
+// ─── RPG Economy ─────────────────────────────────────────────────────────────
+
+export async function awardSoulCoins(
+  result: 'win' | 'loss' | 'incomplete',
+  marginPercent: number
+): Promise<number> {
+  const userId = await uid();
+  if (!userId) return 0;
+
+  let coins = 0;
+  if (result === 'win') {
+    coins = 10;
+    if (marginPercent >= 20) coins += 5;
+    if (marginPercent >= 50) coins += 10;
+  } else if (result === 'loss') {
+    coins = 2;
+  } else {
+    coins = 1;
+  }
+
+  await supabase.rpc('add_soul_coins', { user_id: userId, amount: coins });
+
+  if (memoryCache.profile) {
+    memoryCache.profile.soulCoins = (memoryCache.profile.soulCoins || 0) + coins;
+    localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(memoryCache.profile));
+  }
+
+  return coins;
 }

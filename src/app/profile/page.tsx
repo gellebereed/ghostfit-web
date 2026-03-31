@@ -18,6 +18,7 @@ export default function ProfilePage() {
   const [goal, setGoal] = useState('');
   const [equipment, setEquipment] = useState<string[]>([]);
   const [signingOut, setSigningOut] = useState(false);
+  const [soulCoins, setSoulCoins] = useState(0);
 
   useEffect(() => { load(); }, []);
 
@@ -30,7 +31,7 @@ export default function ProfilePage() {
     const totalSec = sessions.reduce((acc, s) => acc + (s.totalDuration || s.setsCompleted * 120), 0);
     setTotalTime(Math.round(totalSec / 3600 * 10) / 10);
     const profile = await getProfile();
-    if (profile) { setGoal(profile.goal); setEquipment(profile.equipment); }
+    if (profile) { setGoal(profile.goal); setEquipment(profile.equipment); setSoulCoins(profile.soulCoins || 0); }
   }
 
   async function handleSignOut() {
@@ -79,6 +80,21 @@ export default function ProfilePage() {
         <p style={{ fontSize: 12, color: 'var(--text2)' }}>
           {tier < 5 ? `${nextTierThreshold - wins} more wins to Tier ${tier + 1}` : 'Max tier reached! 👑'}
         </p>
+      </div>
+
+      <div style={{ padding: '0 20px', marginTop: 16 }}>
+        <Link href="/shop" style={{ textDecoration: 'none', display: 'block', background: 'var(--surface)', borderRadius: 'var(--r)', padding: '12px 16px', border: '1px solid var(--accent-glow2)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 20 }}>🛒</span>
+              <div>
+                <div style={{ fontWeight: 800, color: 'var(--text)' }}>Soul Shop</div>
+                <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>⚡ {soulCoins} Soul Coins</div>
+              </div>
+            </div>
+            <div style={{ color: 'var(--accent)', fontWeight: 800 }}>→</div>
+          </div>
+        </Link>
       </div>
 
       <div style={{ padding: '0 20px', marginBottom: 16 }}>

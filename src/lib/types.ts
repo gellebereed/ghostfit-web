@@ -41,6 +41,9 @@ export interface UserProfile {
   currentWeek: number;
   onboardingComplete: boolean;
   createdAt: number;
+  soulCoins: number;
+  unlockedCosmetics: string[];
+  equippedCosmetics: Record<string, string>;
 }
 
 export interface ExerciseInfo {
