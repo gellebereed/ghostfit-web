@@ -1,18 +1,21 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getProfile, saveProfile, savePlan, getCurrentPlan } from '@/lib/db';
+import { getProfile, saveProfile, savePlan } from '@/lib/db';
 import { EQUIPMENT_ICONS, ALL_EQUIPMENT } from '@/lib/equipment-icons';
 
 export default function EquipmentEditorPage() {
   const router = useRouter();
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
   const [equipment, setEquipment] = useState<string[]>([]);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [search, setSearch] = useState('');
   const [snackbar, setSnackbar] = useState<{ text: string; undoItem: string } | null>(null);
   const [showRegenBanner, setShowRegenBanner] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [scanning, setScanning] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -50,6 +53,34 @@ export default function EquipmentEditorPage() {
   async function persistEquipment(equip: string[]) {
     const profile = await getProfile();
     if (profile) await saveProfile({ ...profile, equipment: equip });
+  }
+
+  async function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setScanning(true);
+    try {
+      const base64 = await new Promise<string>((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res((r.result as string).split(',')[1]);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+      const resp = await fetch('/api/vision', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64 }),
+      });
+      const data = await resp.json();
+      if (data.equipment?.length) {
+        const newEquip = [...new Set([...equipment, ...data.equipment])];
+        setEquipment(newEquip);
+        await persistEquipment(newEquip);
+        setShowRegenBanner(true);
+      }
+    } catch {}
+    setScanning(false);
+    // Reset file input so the same file can be re-selected
+    e.target.value = '';
   }
 
   async function regeneratePlan() {
@@ -97,7 +128,33 @@ export default function EquipmentEditorPage() {
         </div>
       )}
 
+      {/* Scan Equipment Section */}
       <div style={{ padding: '8px 20px' }}>
+        <div className="onb-options" style={{ marginBottom: 16 }}>
+          <div className="onb-option" onClick={() => cameraRef.current?.click()}>
+            <div className="icon">📷</div>
+            <h3>Take a Photo</h3>
+            <p>Scan new equipment</p>
+          </div>
+          <div className="onb-option" onClick={() => galleryRef.current?.click()}>
+            <div className="icon">🖼️</div>
+            <h3>Upload Photo</h3>
+            <p>Choose from gallery</p>
+          </div>
+        </div>
+
+        <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="camera-input" onChange={handlePhoto} />
+        <input ref={galleryRef} type="file" accept="image/*" className="camera-input" onChange={handlePhoto} />
+
+        {scanning && (
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            <div className="loader" />
+            <p style={{ marginTop: 12, color: 'var(--text2)', fontSize: 13 }}>AI scanning equipment...</p>
+          </div>
+        )}
+
+        {/* Current Equipment Grid */}
+        <div className="equip-label" style={{ marginTop: 8 }}>Your Equipment ({equipment.length})</div>
         <div className="equip-card-grid">
           {equipment.map(e => (
             <div key={e} className="equip-card selected">

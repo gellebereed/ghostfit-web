@@ -5,7 +5,8 @@ import { EQUIPMENT_ICONS, ALL_EQUIPMENT } from '@/lib/equipment-icons';
 
 export default function EquipmentPage() {
   const router = useRouter();
-  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
   const [equipment, setEquipment] = useState<string[]>([]);
   const [showList, setShowList] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -52,10 +53,15 @@ export default function EquipmentPage() {
       <p className="onb-sub">We&apos;ll build your plan around what you actually own.</p>
 
       <div className="onb-options">
-        <div className="onb-option" onClick={() => fileRef.current?.click()}>
+        <div className="onb-option" onClick={() => cameraRef.current?.click()}>
           <div className="icon">📷</div>
           <h3>Take a Photo</h3>
           <p>Point at your equipment</p>
+        </div>
+        <div className="onb-option" onClick={() => galleryRef.current?.click()}>
+          <div className="icon">🖼️</div>
+          <h3>Upload Photo</h3>
+          <p>Choose from gallery</p>
         </div>
         <div className="onb-option" onClick={() => setShowList(!showList)}>
           <div className="icon">☰</div>
@@ -64,11 +70,13 @@ export default function EquipmentPage() {
         </div>
       </div>
 
-      <input ref={fileRef} type="file" accept="image/*" capture="environment" className="camera-input" onChange={handlePhoto} />
+      {/* Camera: forces camera capture */}
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="camera-input" onChange={handlePhoto} />
+      {/* Gallery: opens photo library */}
+      <input ref={galleryRef} type="file" accept="image/*" className="camera-input" onChange={handlePhoto} />
 
       {scanning && <div className="loading"><div className="loader" /><p style={{marginTop: 12, color: 'var(--text2)'}}>AI scanning equipment...</p></div>}
 
-      {/* Upgrade 1: Equipment Image Cards in 3-column grid */}
       {showList && (
         <div className="equip-card-grid">
           {ALL_EQUIPMENT.map(e => (
