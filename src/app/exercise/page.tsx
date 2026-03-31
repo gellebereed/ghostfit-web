@@ -598,51 +598,56 @@ function ExerciseContent() {
         {/* Exercise info */}
         <div className="ex-detail">
           <h2>{exercise.name}</h2>
-          <div className="ex-equip-chip">{exercise.equipment}</div>
         </div>
 
-        {/* Tutorial Video Section */}
-        <div className="gif-section">
-          <div className="gif-label tutorial-label">TUTORIAL</div>
-          {videoLoading ? (
-            <div className="relative w-full rounded-2xl overflow-hidden bg-[#141414]" style={{ aspectRatio: '16/9' }}>
-              <div className="gif-shimmer" style={{ height: '100%' }} />
-            </div>
-          ) : videoId ? (
-            <YouTubeEmbed videoId={videoId} />
-          ) : (
-            // Fallback: show premium GIF if video unavailable
-            gifLoading ? (
-              <div className="gif-premium"><div className="gif-shimmer" style={{ height: '100%' }} /></div>
+        {/* Tutorial section — full bleed, no side padding */}
+        <div className="mb-5 -mx-4 sm:-mx-5" style={{ marginBottom: 20 }}>
+          <div className="px-4 sm:px-5 mb-2" style={{ padding: '0 20px', marginBottom: 8 }}>
+            <p style={{ color: 'var(--accent)', fontSize: 11, fontWeight: '900', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
+              TUTORIAL
+            </p>
+          </div>
+          
+          <div className="w-full bg-[#141414]" style={{ aspectRatio: '16/9', width: '100%', position: 'relative', overflow: 'hidden' }}>
+            {videoLoading ? (
+              <div className="w-full h-full flex flex-col items-center justify-center gap-3 animate-pulse">
+                <div className="w-12 h-12 rounded-full bg-[#1F1F1F] flex items-center justify-center">
+                  <span className="text-gray-600 text-xl">▶</span>
+                </div>
+                <p className="text-gray-700 text-xs uppercase tracking-widest font-bold">
+                  Loading tutorial...
+                </p>
+              </div>
+            ) : videoId ? (
+              <YouTubeEmbed videoId={videoId} />
             ) : gifUrl ? (
-              <div className="gif-premium">
-                <img src={gifUrl} alt={`${exercise.name} demonstration`} loading="lazy" />
+              <div className="gif-premium" style={{ margin: 0, borderRadius: 0, height: '100%' }}>
+                <img src={gifUrl} alt={`${exercise.name} demonstration`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div className="gif-vignette" />
+              </div>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <p className="text-gray-600 text-sm">No tutorial available</p>
+              </div>
+            )}
+          </div>
+          
+          {/* GIF shown below video as form reference — only if video exists */}
+          {gifUrl && videoId && (
+            <div className="px-4 sm:px-5 mt-3" style={{ padding: '0 20px', marginTop: 12 }}>
+              <p style={{ color: 'var(--text3)', fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                FORM REFERENCE
+              </p>
+              <div className="gif-premium" style={{ margin: 0, borderRadius: 16 }}>
+                <img src={gifUrl} alt={`${exercise.name} form`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 <div className="gif-vignette" />
                 <div className="gif-badge">
                   <p>Proper Form</p>
                 </div>
               </div>
-            ) : (
-              <div className="gif-placeholder" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <span>🏋️</span>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Video unavailable</span>
-              </div>
-            )
+            </div>
           )}
         </div>
-
-        {/* GIF below YouTube (if both available) */}
-        {gifUrl && videoId && (
-          <div style={{ padding: '0 20px' }}>
-            <div className="gif-premium">
-              <img src={gifUrl} alt={`${exercise.name} form guide`} loading="lazy" />
-              <div className="gif-vignette" />
-              <div className="gif-badge">
-                <p>Proper Form</p>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Instructions */}
         {instructions.length > 0 && (

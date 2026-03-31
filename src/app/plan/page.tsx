@@ -5,6 +5,120 @@ import { useRouter } from 'next/navigation';
 import { getCurrentPlan, getProfile, savePlan } from '@/lib/db';
 import { WorkoutPlan, Exercise } from '@/lib/types';
 
+// DND Kit Imports
+import {
+  DndContext,
+  closestCenter,
+  TouchSensor,
+  MouseSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+  defaultDropAnimationSideEffects
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+// --- Sortable Item Component ---
+function SortableExerciseRow({ 
+  exercise, 
+  dayIdx, 
+  exIdx, 
+  editing, 
+  onDelete, 
+  onUpdate 
+}: { 
+  exercise: Exercise & { id?: string }, 
+  dayIdx: number, 
+  exIdx: number, 
+  editing: boolean, 
+  onDelete: (idx: number) => void, 
+  onUpdate: (idx: number, field: keyof Exercise, val: any) => void 
+}) {
+  const itemId = exercise.id || `${exercise.name}-${dayIdx}-${exIdx}`;
+  
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: itemId, disabled: !editing });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 999 : 'auto',
+    position: 'relative' as const,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="day-card-ex">
+      {editing && (
+        <div
+          {...attributes}
+          {...listeners}
+          style={{ 
+            color: 'var(--text3)', 
+            fontSize: 18, 
+            marginRight: 10, 
+            cursor: 'grab', 
+            userSelect: 'none',
+            padding: '8px 4px',
+            touchAction: 'none'
+          }}
+        >
+          ⠿
+        </div>
+      )}
+      <span className="ex-name" style={{ fontSize: 12, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {exercise.name}
+      </span>
+      {editing ? (
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <button className="btn-ghost" style={{ fontSize: 9, padding: '2px 4px', border: '1px solid var(--border)', borderRadius: 4, color: exercise.type === 'cardio' ? 'var(--accent)' : 'var(--text3)' }}
+            onClick={() => onUpdate(exIdx, 'type', exercise.type === 'cardio' ? 'strength' : 'cardio')}>
+            {exercise.type === 'cardio' ? 'CARDIO' : 'STR'}
+          </button>
+          {exercise.type === 'cardio' ? (
+            <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              <input type="number" value={Math.round((exercise.durationSeconds || 600) / 60)} 
+                onChange={e => onUpdate(exIdx, 'durationSeconds', (parseInt(e.target.value) || 1) * 60)}
+                inputMode="numeric"
+                style={{ width: 36, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', textAlign: 'center', padding: '4px', fontSize: 11, fontFamily: 'inherit' }} />
+              <span style={{ fontSize: 10, color: 'var(--text3)' }}>min</span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              <input type="number" value={exercise.sets} 
+                onChange={e => onUpdate(exIdx, 'sets', parseInt(e.target.value) || 1)}
+                inputMode="numeric"
+                style={{ width: 28, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', textAlign: 'center', padding: '4px', fontSize: 11, fontFamily: 'inherit' }} />
+              <span style={{ fontSize: 10, padding: '0 1px' }}>×</span>
+              <input type="number" value={exercise.reps} 
+                onChange={e => onUpdate(exIdx, 'reps', parseInt(e.target.value) || 1)}
+                inputMode="numeric"
+                style={{ width: 32, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', textAlign: 'center', padding: '4px', fontSize: 11, fontFamily: 'inherit' }} />
+            </div>
+          )}
+          <button className="btn-ghost" onClick={() => onDelete(exIdx)} style={{ color: 'var(--loss-red)', fontSize: 14 }}>🗑️</button>
+        </div>
+      ) : (
+        <span className="ex-reps" style={{ fontSize: 11 }}>
+          {exercise.type === 'cardio' ? `${Math.round((exercise.durationSeconds || 300) / 60)} min` : `${exercise.sets} × ${exercise.reps}`}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function PlanPage() {
   const router = useRouter();
   const [plan, setPlan] = useState<WorkoutPlan | null>(null);
@@ -14,17 +128,33 @@ export default function PlanPage() {
   const [editing, setEditing] = useState(false);
   const [showRegen, setShowRegen] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
-  const [dragFrom, setDragFrom] = useState<{ dayIdx: number; exIdx: number } | null>(null);
 
   // Upgrade: Add Exercise state
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [dayToAddTo, setDayToAddTo] = useState<number | null>(null);
   const [search, setSearch] = useState('');
+  const [newExEquipment, setNewExEquipment] = useState('');
 
   // AI state
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<any[]>([]);
+
+  // Move Day state
+  const [movingDay, setMovingDay] = useState<number | null>(null);
+
+  // DND Kit Sensors
+  const sensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: { distance: 8 }
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200,
+        tolerance: 8,
+      }
+    })
+  );
 
   const COMMON_EXERCISES = [
     'Treadmill (Run)', 'Spin Bike', 'Rowing Machine', 'Elliptical', 'Jump Rope',
@@ -40,7 +170,12 @@ export default function PlanPage() {
       const p = await getCurrentPlan();
       setPlan(p);
       const profile = await getProfile();
-      if (profile) { setGoal(profile.goal); setEquipment(profile.equipment); }
+      if (profile) { 
+        setGoal(profile.goal); 
+        setEquipment(profile.equipment);
+        if (profile.equipment.length > 0) setNewExEquipment(profile.equipment[0]);
+        else setNewExEquipment('Bodyweight');
+      }
     } catch (err) {
       console.error('Plan load error:', err);
     } finally {
@@ -116,7 +251,7 @@ export default function PlanPage() {
         reps: type === 'cardio' ? 1 : 10,
         durationSeconds: type === 'cardio' ? 600 : 0,
         type: type as any,
-        equipment: typeof item === 'string' ? 'Any' : item.equipmentNeeded || 'Any'
+        equipment: typeof item === 'string' ? newExEquipment : item.equipmentNeeded || newExEquipment
       }]
     })};
     setPlan(newPlan);
@@ -132,19 +267,42 @@ export default function PlanPage() {
     setPlan(newPlan);
   }
 
-  function handleDrop(dayIdx: number, dropIdx: number) {
-    if (!dragFrom || !plan || dragFrom.dayIdx !== dayIdx || dragFrom.exIdx === dropIdx) {
-      setDragFrom(null); return;
+  function swapDays(idxA: number, idxB: number) {
+    if (!plan) return;
+    const newDays = [...plan.days];
+    const tempFocus = newDays[idxA].focus;
+    const tempExercises = newDays[idxA].exercises;
+    const tempIsRest = newDays[idxA].isRest;
+    
+    newDays[idxA] = {
+      ...newDays[idxA],
+      focus: newDays[idxB].focus,
+      exercises: newDays[idxB].exercises,
+      isRest: newDays[idxB].isRest
+    };
+    newDays[idxB] = {
+      ...newDays[idxB],
+      focus: tempFocus,
+      exercises: tempExercises,
+      isRest: tempIsRest
+    };
+    
+    setPlan({ ...plan, days: newDays });
+  }
+
+  function handleExerciseReorder(dayIdx: number, activeId: string, overId: string) {
+    if (!plan || activeId === overId) return;
+    
+    const day = plan.days[dayIdx];
+    const oldIdx = day.exercises.findIndex((e, ei) => ( (e as any).id || `${e.name}-${dayIdx}-${ei}`) === activeId);
+    const newIdx = day.exercises.findIndex((e, ei) => ( (e as any).id || `${e.name}-${dayIdx}-${ei}`) === overId);
+    
+    if (oldIdx !== -1 && newIdx !== -1) {
+      const newPlan = { ...plan, days: plan.days.map((d, di) => di !== dayIdx ? d : {
+        ...d, exercises: arrayMove(d.exercises, oldIdx, newIdx)
+      })};
+      setPlan(newPlan);
     }
-    const newPlan = { ...plan, days: plan.days.map((d, di) => {
-      if (di !== dayIdx) return d;
-      const exs = [...d.exercises];
-      const [moved] = exs.splice(dragFrom.exIdx, 1);
-      exs.splice(dropIdx, 0, moved);
-      return { ...d, exercises: exs };
-    })};
-    setPlan(newPlan);
-    setDragFrom(null);
   }
 
   if (regenerating) return (
@@ -160,12 +318,27 @@ export default function PlanPage() {
 
   return (
     <div style={{ paddingBottom: 100 }}>
-      {/* Search Sheet */}
+      {/* Search/Add Exercise Sheet */}
       {showAddSheet && (
         <>
           <div className="bottom-sheet-backdrop" onClick={() => setShowAddSheet(false)} />
-          <div className="bottom-sheet" style={{ zIndex: 300, minHeight: '60vh' }}>
+          <div className="bottom-sheet" style={{ zIndex: 300, minHeight: '70vh' }}>
             <div style={{ padding: '16px 16px 8px' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', letterSpacing: 1, marginBottom: 8 }}>ADD NEW EXERCISE</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+                <div>
+                  <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', marginBottom: 4, display: 'block' }}>Equipment</label>
+                  <select 
+                    value={newExEquipment} 
+                    onChange={e => setNewExEquipment(e.target.value)}
+                    style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, color: 'var(--text)', padding: '12px', fontSize: 13, appearance: 'none', backgroundImage: 'linear-gradient(45deg, transparent 50%, var(--text3) 50%), linear-gradient(135deg, var(--text3) 50%, transparent 50%)', backgroundPosition: 'calc(100% - 20px) calc(1em + 2px), calc(100% - 15px) calc(1em + 2px)', backgroundSize: '5px 5px, 5px 5px', backgroundRepeat: 'no-repeat' }}
+                  >
+                    {equipment.map(eq => <option key={eq} value={eq}>{eq}</option>)}
+                    <option value="Bodyweight">Bodyweight</option>
+                  </select>
+                </div>
+              </div>
+
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', letterSpacing: 1, marginBottom: 8 }}>AI SUGGESTIONS 🤖</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input className="name-input" style={{ flex: 1, padding: 10, fontSize: 13, textAlign: 'left' }}
@@ -211,6 +384,45 @@ export default function PlanPage() {
         </>
       )}
 
+      {/* Swap Day Sheet */}
+      {movingDay !== null && (
+        <>
+          <div className="bottom-sheet-backdrop" onClick={() => setMovingDay(null)} />
+          <div className="bottom-sheet" style={{ zIndex: 300 }}>
+            <div style={{ padding: '20px' }}>
+              <div style={{ width: 40, height: 4, background: 'var(--border)', borderRadius: 2, margin: '0 auto 20px' }} />
+              <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Swap {plan.days[movingDay].dayName} with...</h3>
+              <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 20 }}>Workouts and rest days will be exchanged</p>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {plan.days.map((day, idx) => {
+                  if (idx === movingDay) return null;
+                  return (
+                    <button 
+                      key={idx} 
+                      onClick={() => { swapDays(movingDay, idx); setMovingDay(null); }}
+                      style={{ 
+                        width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'between',
+                        padding: '16px', borderRadius: 12, background: 'var(--surface2)', border: '1px solid var(--border)',
+                        textAlign: 'left', cursor: 'pointer', transition: 'var(--t)'
+                      }}
+                    >
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontWeight: 700, fontSize: 14 }}>{day.dayName}</p>
+                        <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                          {day.isRest ? '😴 Rest day' : `${day.focus} · ${day.exercises.length} exercises`}
+                        </p>
+                      </div>
+                      <span style={{ color: 'var(--accent)', fontSize: 18 }}>⇄</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       <header className="hdr">
         <Link href="/settings" className="hdr-back">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
@@ -235,55 +447,54 @@ export default function PlanPage() {
       {plan.days.map((day, di) => (
         <div key={di} className={`day-card ${day.dayNumber === todayNum ? 'today-highlight' : ''}`}>
           <div className="day-card-header">
-            <h3>{day.dayName} · {day.isRest ? '🛌 Rest' : day.focus}</h3>
-            {editing && (
-              <button className="btn-ghost" onClick={() => toggleRest(di)} style={{ fontSize: 10, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6 }}>
-                {day.isRest ? 'Make Active' : 'Make Rest'}
-              </button>
-            )}
-            {!editing && day.dayNumber === todayNum && <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: 11 }}>TODAY</span>}
-          </div>
-          {!day.isRest && day.exercises.map((ex, ei) => (
-            <div
-              className="day-card-ex" key={ei}
-              draggable={editing}
-              onDragStart={() => setDragFrom({ dayIdx: di, exIdx: ei })}
-              onDragOver={e => e.preventDefault()}
-              onDrop={() => handleDrop(di, ei)}
-              style={{ opacity: dragFrom?.dayIdx === di && dragFrom?.exIdx === ei ? 0.4 : 1, cursor: editing ? 'grab' : undefined }}
-            >
-              {editing && (
-                <span style={{ color: 'var(--text3)', fontSize: 14, marginRight: 6, cursor: 'grab', userSelect: 'none' }}>⠿</span>
-              )}
-              <span className="ex-name" style={{ fontSize: 12, flex: 1 }}>{ex.name}</span>
-              {editing ? (
-                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                  <button className="btn-ghost" style={{ fontSize: 9, padding: '2px 4px', border: '1px solid var(--border)', borderRadius: 4, color: ex.type === 'cardio' ? 'var(--accent)' : 'var(--text3)' }}
-                    onClick={() => updateExercise(di, ei, 'type', ex.type === 'cardio' ? 'strength' : 'cardio')}>
-                    {ex.type === 'cardio' ? 'CARDIO' : 'STR'}
-                  </button>
-                  {ex.type === 'cardio' ? (
-                    <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                      <input type="number" value={Math.round((ex.durationSeconds || 600) / 60)} onChange={e => updateExercise(di, ei, 'durationSeconds', (parseInt(e.target.value) || 1) * 60)}
-                        style={{ width: 36, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', textAlign: 'center', padding: '4px', fontSize: 11, fontFamily: 'inherit' }} />
-                      <span style={{ fontSize: 10, color: 'var(--text3)' }}>min</span>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                      <input type="number" value={ex.sets} onChange={e => updateExercise(di, ei, 'sets', parseInt(e.target.value) || 1)}
-                        style={{ width: 28, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', textAlign: 'center', padding: '4px', fontSize: 11, fontFamily: 'inherit' }} />
-                      <span style={{ fontSize: 10, padding: '0 1px' }}>×</span>
-                      <input type="number" value={ex.reps} onChange={e => updateExercise(di, ei, 'reps', parseInt(e.target.value) || 1)}
-                        style={{ width: 32, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', textAlign: 'center', padding: '4px', fontSize: 11, fontFamily: 'inherit' }} />
-                    </div>
-                  )}
-                  <button className="btn-ghost" onClick={() => removeExercise(di, ei)} style={{ color: 'var(--loss-red)', fontSize: 14 }}>🗑️</button>
-                </div>
-              ) : (
-                <span className="ex-reps" style={{ fontSize: 11 }}>{ex.type === 'cardio' ? `${Math.round((ex.durationSeconds || 300) / 60)} min` : `${ex.sets} × ${ex.reps}`}</span>
-              )}
+            <div style={{ flex: 1 }}>
+              <h3 style={{ fontSize: 14 }}>{day.dayName} · {day.isRest ? '🛌 Rest' : day.focus}</h3>
+              {day.isRest && !editing && <span style={{ color: 'var(--text3)', fontSize: 10 }}>Rest Day</span>}
             </div>
-          ))}
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              {editing && (
+                <>
+                  <button 
+                    className="btn-ghost" 
+                    onClick={() => setMovingDay(di)}
+                    style={{ fontSize: 10, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text2)' }}
+                  >
+                    ⇄ Swap
+                  </button>
+                  <button className="btn-ghost" onClick={() => toggleRest(di)} style={{ fontSize: 10, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6 }}>
+                    {day.isRest ? '💪 Activate' : '😴 Rest'}
+                  </button>
+                </>
+              )}
+              {!editing && day.dayNumber === todayNum && <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: 11 }}>TODAY</span>}
+            </div>
+          </div>
+          {!day.isRest && (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={({ active, over }) => {
+                if (over) handleExerciseReorder(di, active.id as string, over.id as string);
+              }}
+            >
+              <SortableContext
+                items={day.exercises.map((e, ei) => (e as any).id || `${e.name}-${di}-${ei}`)}
+                strategy={verticalListSortingStrategy}
+              >
+                {day.exercises.map((exercise, ei) => (
+                  <SortableExerciseRow
+                    key={(exercise as any).id || `${exercise.name}-${di}-${ei}`}
+                    exercise={exercise}
+                    dayIdx={di}
+                    exIdx={ei}
+                    editing={editing}
+                    onDelete={idx => removeExercise(di, idx)}
+                    onUpdate={(idx, f, v) => updateExercise(di, idx, f, v)}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
+          )}
           {editing && !day.isRest && (
             <button className="add-exercise-btn" onClick={() => { setDayToAddTo(di); setShowAddSheet(true); }}>
               + Add Exercise
