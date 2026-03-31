@@ -6,6 +6,17 @@ import { getCurrentPlan, getAllSessions, getWinCount, getStreak } from '@/lib/db
 import { WorkoutDay } from '@/lib/types';
 import { getAvatarPrefs, getCharEmoji } from '@/lib/avatar';
 
+const WORKOUT_FOCUS_IMAGES: Record<string, string> = {
+  'Upper Body': 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Bench_Press_-_Medium_Grip/0.jpg',
+  'Lower Body': 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Full_Squat/0.jpg',
+  'Push':       'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Bench_Press_-_Medium_Grip/0.jpg',
+  'Pull':       'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Curl/0.jpg',
+  'Legs':       'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Full_Squat/0.jpg',
+  'Core':       'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Ab_Crunch_Machine/0.jpg',
+  'Cardio':     'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Jogging,_Treadmill/0.jpg',
+  'Full Body':  'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Deadlift/0.jpg',
+};
+
 export default function WorkoutPage() {
   const router = useRouter();
   const [today, setToday] = useState<WorkoutDay | null>(null);
@@ -33,7 +44,6 @@ export default function WorkoutPage() {
       const completedNames = new Set(todaySessions.map(s => s.exerciseName));
       setCompleted(completedNames);
 
-      // Check if all exercises done for recap (Upgrade 7)
       if (td && !td.isRest && td.exercises.every(ex => completedNames.has(ex.name))) {
         const wins = await getWinCount();
         const streak = await getStreak();
@@ -56,10 +66,7 @@ export default function WorkoutPage() {
     try {
       const html2canvas = (await import('html2canvas')).default;
       const canvas = await html2canvas(recapCardRef.current, {
-        backgroundColor: '#141414',
-        scale: 2,
-        useCORS: true,
-        logging: false,
+        backgroundColor: '#141414', scale: 2, useCORS: true, logging: false,
       });
       canvas.toBlob(async (blob) => {
         if (!blob) return;
@@ -90,11 +97,13 @@ export default function WorkoutPage() {
   );
 
   const done = today.exercises.filter(ex => completed.has(ex.name)).length;
-  const allDone = done === today.exercises.length;
+  const total = today.exercises.length;
+  const allDone = done === total;
+  const heroImg = WORKOUT_FOCUS_IMAGES[today.focus] ?? WORKOUT_FOCUS_IMAGES['Full Body'];
 
   return (
     <div>
-      {/* Upgrade 7: Post-Workout Recap Overlay */}
+      {/* Post-Workout Recap Overlay */}
       {showRecap && recapData && (
         <div className="recap-overlay">
           <div className="recap-title">BATTLE COMPLETE</div>
@@ -134,41 +143,109 @@ export default function WorkoutPage() {
         </div>
       )}
 
-      <div className="workout-header">
-        <button className="hdr-back" onClick={() => router.push('/')}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
-        </button>
-        <h1>{today.focus} — Day {today.dayNumber}</h1>
-        <span className="workout-progress">{done}/{today.exercises.length} DONE</span>
-      </div>
-      <div className="progress-bar">
-        <div className="progress-fill" style={{ width: `${(done / today.exercises.length) * 100}%` }} />
-      </div>
+      {/* ===== NIKE-INSPIRED HERO SECTION ===== */}
+      <div className="wk-hero">
+        <img src={heroImg} alt={today.focus} className="wk-hero-img" />
+        <div className="wk-hero-gradient" />
 
-      {today.exercises.map((ex, i) => {
-        const isDone = completed.has(ex.name);
-        const isNext = !isDone && today.exercises.slice(0, i).every(e => completed.has(e.name));
-        return (
-          <div key={i} className={`ex-card ${isDone ? 'completed' : ''} ${isNext ? 'current' : ''}`}
-            onClick={() => !isDone && router.push(`/exercise?idx=${i}`)}>
-            <div className={`ex-status ${isDone ? 'done' : ''}`}>{isDone ? '✓' : '○'}</div>
-            <div className="ex-info">
-              <h3>{ex.name} {isDone && '🔥'}</h3>
-              <p style={{ color: isNext ? 'var(--accent)' : undefined }}>
-                {ex.type === 'cardio' ? `${Math.round((ex.durationSeconds || 300) / 60)} min` : `${ex.sets} sets × ${ex.reps} reps`}
-              </p>
-            </div>
-            {isNext && <button className="ex-start">Start →</button>}
+        {/* Back button */}
+        <button className="wk-hero-back" onClick={() => router.push('/')}>←</button>
+
+        {/* Progress pill */}
+        <div className={`wk-hero-pill ${allDone ? 'done' : ''}`}>
+          {done}/{total} DONE
+        </div>
+
+        {/* Bottom info */}
+        <div className="wk-hero-info">
+          <div className="wk-hero-tags">
+            <span className="wk-tag-focus">{today.focus}</span>
+            <span className="wk-tag-dot">·</span>
+            <span className="wk-tag-day">Day {today.dayNumber}</span>
           </div>
-        );
-      })}
+          <h1 className="wk-hero-title">Today&apos;s<br/>Workout</h1>
+          <div className="wk-hero-meta">
+            <span>⏱ ~{total * 8} min</span>
+            <span>🔥 {total} exercises</span>
+            <span>💪 {today.focus}</span>
+          </div>
+        </div>
+      </div>
 
+      {/* Progress bar */}
+      <div className="wk-progress-track">
+        <div className="wk-progress-fill" style={{ width: `${(done / total) * 100}%` }} />
+      </div>
+
+      {/* ===== EXERCISE CARDS ===== */}
+      <div className="wk-cards">
+        {today.exercises.map((ex, i) => {
+          const isDone = completed.has(ex.name);
+          const isNext = !isDone && today.exercises.slice(0, i).every(e => completed.has(e.name));
+
+          if (isDone) {
+            return (
+              <div key={i} className="wk-card wk-card-done">
+                <div className="wk-card-check">✓</div>
+                <div className="wk-card-body">
+                  <p className="wk-card-name done">{ex.name}</p>
+                  <p className="wk-card-sub green">Completed ✓</p>
+                </div>
+              </div>
+            );
+          }
+
+          if (isNext) {
+            return (
+              <div key={i} className="wk-card wk-card-active" onClick={() => router.push(`/exercise?idx=${i}`)}>
+                <div className="wk-card-glow" />
+                <div className="wk-card-inner">
+                  <div className="wk-card-pulse-wrap">
+                    <div className="wk-card-pulse-ring" />
+                    <div className="wk-card-pulse-center">
+                      <div className="wk-card-pulse-dot" />
+                    </div>
+                  </div>
+                  <div className="wk-card-body">
+                    <p className="wk-card-name active">{ex.name}</p>
+                    <div className="wk-card-detail">
+                      <span className="wk-card-sets">
+                        {ex.type === 'cardio' ? `${Math.round((ex.durationSeconds || 300) / 60)} min` : `${ex.sets} sets × ${ex.reps} reps`}
+                      </span>
+                      <span className="wk-card-dot">·</span>
+                      <span className="wk-card-time">~{ex.sets * 2} min</span>
+                    </div>
+                  </div>
+                  <button className="wk-start-btn" onClick={(e) => { e.stopPropagation(); router.push(`/exercise?idx=${i}`); }}>
+                    Start →
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
+          // Upcoming
+          return (
+            <div key={i} className="wk-card wk-card-upcoming">
+              <div className="wk-card-num">{i + 1}</div>
+              <div className="wk-card-body">
+                <p className="wk-card-name upcoming">{ex.name}</p>
+                <p className="wk-card-sub">
+                  {ex.type === 'cardio' ? `${Math.round((ex.durationSeconds || 300) / 60)} min` : `${ex.sets} × ${ex.reps} reps`}
+                </p>
+              </div>
+              <span className="wk-card-equip">{ex.equipment}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Complete workout button */}
       {allDone && !showRecap && (
-        <div style={{ padding: 20, textAlign: 'center' }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>🎉</div>
-          <h3 style={{ fontSize: 18, fontWeight: 800 }}>All exercises complete!</h3>
-          <button className="btn-outline" onClick={() => setShowRecap(true)} style={{ margin: '12px 0' }}>View Recap 📊</button>
-          <Link href="/" className="btn-primary" style={{ marginTop: 8, textDecoration: 'none' }}>Back to Home</Link>
+        <div className="wk-complete-bar">
+          <button className="wk-complete-btn" onClick={() => setShowRecap(true)}>
+            Complete Workout 🎉
+          </button>
         </div>
       )}
     </div>

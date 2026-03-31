@@ -90,27 +90,22 @@ function ExerciseContent() {
         setGifUrl(cached.gifUrl || null);
         setInstructions(cached.instructions);
         setGifLoading(false);
-        // Check if video ID is already cached
         if (cached.youtubeVideoId) {
           setVideoId(cached.youtubeVideoId);
           setVideoLoading(false);
           return;
         }
-        // GIF cached but no video yet — fetch video in background
         await fetchAndCacheVideo(name);
         return;
       }
-      // Fetch from ExerciseDB API (free)
-      const searchName = name.toLowerCase().replace(/[^a-z\s]/g, '');
-      const res = await fetch(`https://exercisedb.p.rapidapi.com/exercises/name/${encodeURIComponent(searchName)}?limit=1`, {
-        headers: { 'X-RapidAPI-Key': 'demo', 'X-RapidAPI-Host': 'exercisedb.p.rapidapi.com' },
-      });
+      // Fetch from server-side ExerciseDB API route
+      const res = await fetch(`/api/exercise-gif?name=${encodeURIComponent(name)}`);
       if (res.ok) {
         const data = await res.json();
-        if (data.length > 0) {
+        if (data.gifUrl) {
           const info: ExerciseInfo = {
-            name, gifUrl: data[0].gifUrl || '', instructions: data[0].instructions || [],
-            bodyPart: data[0].bodyPart || '',
+            name, gifUrl: data.gifUrl, instructions: data.instructions || [],
+            bodyPart: data.bodyPart || '',
           };
           setGifUrl(info.gifUrl);
           setInstructions(info.instructions);
@@ -119,7 +114,6 @@ function ExerciseContent() {
       }
     } catch {}
     setGifLoading(false);
-    // Fetch YouTube video regardless of GIF result
     await fetchAndCacheVideo(name);
   }
 
@@ -355,21 +349,38 @@ function ExerciseContent() {
           ) : videoId ? (
             <YouTubePlayer videoId={videoId} />
           ) : (
-            // Fallback: show GIF if video unavailable
-            <div className="gif-player">
-              {gifLoading ? (
-                <div className="gif-shimmer" />
-              ) : gifUrl ? (
-                <img src={gifUrl} alt={exercise.name} />
-              ) : (
-                <div className="gif-placeholder" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <span>🏋️</span>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Video unavailable</span>
+            // Fallback: show premium GIF if video unavailable
+            gifLoading ? (
+              <div className="gif-premium"><div className="gif-shimmer" style={{ height: '100%' }} /></div>
+            ) : gifUrl ? (
+              <div className="gif-premium">
+                <img src={gifUrl} alt={`${exercise.name} demonstration`} loading="lazy" />
+                <div className="gif-vignette" />
+                <div className="gif-badge">
+                  <p>Proper Form</p>
                 </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="gif-placeholder" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <span>🏋️</span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Video unavailable</span>
+              </div>
+            )
           )}
         </div>
+
+        {/* GIF below YouTube (if both available) */}
+        {gifUrl && videoId && (
+          <div style={{ padding: '0 20px' }}>
+            <div className="gif-premium">
+              <img src={gifUrl} alt={`${exercise.name} form guide`} loading="lazy" />
+              <div className="gif-vignette" />
+              <div className="gif-badge">
+                <p>Proper Form</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Instructions */}
         {instructions.length > 0 && (
