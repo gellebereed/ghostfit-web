@@ -24,6 +24,30 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+const dayNames = [
+  'Sunday', 'Monday', 'Tuesday', 'Wednesday',
+  'Thursday', 'Friday', 'Saturday'
+];
+
+function formatExerciseDetail(exercise: Exercise): string {
+  if (exercise.type === 'duration') {
+    const secs = exercise.durationSeconds ?? 30;
+    const display = secs >= 60 
+      ? `${Math.floor(secs/60)}min ${secs%60 > 0 ? secs%60+'s' : ''}`.trim()
+      : `${secs}s`;
+    return `${exercise.sets ?? 3} × ${display}`;
+  }
+  
+  if (exercise.type === 'cardio') {
+    return `${Math.round((exercise.durationSeconds || 600) / 60)} min`;
+  }
+  
+  // Safety check — never show "undefined"
+  const reps = exercise.reps ?? 10;
+  const sets = exercise.sets ?? 3;
+  return `${sets} × ${reps}`;
+}
+
 // --- Sortable Item Component ---
 function SortableExerciseRow({ 
   exercise, 
@@ -97,12 +121,12 @@ function SortableExerciseRow({
             </div>
           ) : (
             <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-              <input type="number" value={exercise.sets} 
+              <input type="number" value={exercise.sets ?? 3} 
                 onChange={e => onUpdate(exIdx, 'sets', parseInt(e.target.value) || 1)}
                 inputMode="numeric"
                 style={{ width: 28, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', textAlign: 'center', padding: '4px', fontSize: 11, fontFamily: 'inherit' }} />
               <span style={{ fontSize: 10, padding: '0 1px' }}>×</span>
-              <input type="number" value={exercise.reps} 
+              <input type="number" value={exercise.reps ?? 10} 
                 onChange={e => onUpdate(exIdx, 'reps', parseInt(e.target.value) || 1)}
                 inputMode="numeric"
                 style={{ width: 32, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', textAlign: 'center', padding: '4px', fontSize: 11, fontFamily: 'inherit' }} />
@@ -112,7 +136,7 @@ function SortableExerciseRow({
         </div>
       ) : (
         <span className="ex-reps" style={{ fontSize: 11 }}>
-          {exercise.type === 'cardio' ? `${Math.round((exercise.durationSeconds || 300) / 60)} min` : `${exercise.sets} × ${exercise.reps}`}
+          {formatExerciseDetail(exercise)}
         </span>
       )}
     </div>
@@ -312,7 +336,11 @@ export default function PlanPage() {
   if (!ready) return <div className="loading"><div className="loader" /></div>;
   if (!plan) return <div className="page"><div className="empty"><div className="icon">👻</div><h3>No plan yet</h3><p>Complete onboarding to generate your plan</p></div><Link href="/" className="btn-outline" style={{ margin: '0 20px' }}>← Back Home</Link></div>;
 
-  const todayNum = new Date().getDay() === 0 ? 7 : new Date().getDay();
+  const todayDayName = dayNames[new Date().getDay()];
+  const isTodayCard = (dayName: string): boolean => {
+    return dayName === todayDayName;
+  };
+
   const goalLabel = goal === 'shredded' ? 'Get Shredded' : goal === 'muscle' ? 'Build Muscle' : goal === 'strength' ? 'Get Stronger' : 'Improve Fitness';
   const available = COMMON_EXERCISES.filter(e => e.toLowerCase().includes(search.toLowerCase()));
 
@@ -445,7 +473,7 @@ export default function PlanPage() {
       </div>
 
       {plan.days.map((day, di) => (
-        <div key={di} className={`day-card ${day.dayNumber === todayNum ? 'today-highlight' : ''}`}>
+        <div key={di} className={`day-card ${isTodayCard(day.dayName) ? 'today-highlight' : ''}`}>
           <div className="day-card-header">
             <div style={{ flex: 1 }}>
               <h3 style={{ fontSize: 14 }}>{day.dayName} · {day.isRest ? '🛌 Rest' : day.focus}</h3>
@@ -466,7 +494,7 @@ export default function PlanPage() {
                   </button>
                 </>
               )}
-              {!editing && day.dayNumber === todayNum && <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: 11 }}>TODAY</span>}
+              {!editing && isTodayCard(day.dayName) && <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: 11 }}>TODAY</span>}
             </div>
           </div>
           {!day.isRest && (

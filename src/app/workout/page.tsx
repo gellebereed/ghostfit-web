@@ -6,6 +6,19 @@ import { getCurrentPlan, getAllSessions, getWinCount, getStreak } from '@/lib/db
 import { WorkoutDay } from '@/lib/types';
 import { getAvatarPrefs, getCharEmoji } from '@/lib/avatar';
 
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function formatExerciseDetail(exercise: any): string {
+  if (exercise.type === 'duration') {
+    const secs = exercise.durationSeconds ?? 30;
+    return `${exercise.sets ?? 3} × ${secs >= 60 ? Math.floor(secs/60)+'m' : secs+'s'}`;
+  }
+  if (exercise.type === 'cardio') {
+    return `${Math.round((exercise.durationSeconds || 300) / 60)} min`;
+  }
+  return `${exercise.sets ?? 3} × ${exercise.reps ?? 10} reps`;
+}
+
 const WORKOUT_FOCUS_IMAGES: Record<string, string> = {
   'Upper Body': 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Bench_Press_-_Medium_Grip/0.jpg',
   'Lower Body': 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Full_Squat/0.jpg',
@@ -33,9 +46,8 @@ export default function WorkoutPage() {
     try {
       const plan = await getCurrentPlan();
       if (!plan) { router.replace('/'); return; }
-      const dayOfWeek = new Date().getDay();
-      const dayNum = dayOfWeek === 0 ? 7 : dayOfWeek;
-      const td = plan.days.find(d => d.dayNumber === dayNum) || null;
+      const todayDayName = DAY_NAMES[new Date().getDay()];
+      const td = plan.days.find(d => d.dayName === todayDayName) || plan.days[0];
       setToday(td);
 
       const sessions = await getAllSessions();
@@ -210,10 +222,10 @@ export default function WorkoutPage() {
                     <p className="wk-card-name active">{ex.name}</p>
                     <div className="wk-card-detail">
                       <span className="wk-card-sets">
-                        {ex.type === 'cardio' ? `${Math.round((ex.durationSeconds || 300) / 60)} min` : `${ex.sets} sets × ${ex.reps} reps`}
+                        {formatExerciseDetail(ex)}
                       </span>
                       <span className="wk-card-dot">·</span>
-                      <span className="wk-card-time">~{ex.sets * 2} min</span>
+                      <span className="wk-card-time">~{(ex.sets ?? 3) * 2} min</span>
                     </div>
                   </div>
                   <button className="wk-start-btn" onClick={(e) => { e.stopPropagation(); router.push(`/exercise?idx=${i}`); }}>
@@ -231,7 +243,7 @@ export default function WorkoutPage() {
               <div className="wk-card-body">
                 <p className="wk-card-name upcoming">{ex.name}</p>
                 <p className="wk-card-sub">
-                  {ex.type === 'cardio' ? `${Math.round((ex.durationSeconds || 300) / 60)} min` : `${ex.sets} × ${ex.reps} reps`}
+                  {formatExerciseDetail(ex)}
                 </p>
               </div>
               <span className="wk-card-equip">{ex.equipment}</span>

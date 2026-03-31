@@ -8,6 +8,18 @@ import { getAvatarPrefs, getCharEmoji } from '@/lib/avatar';
 import { getGhostTaunt } from '@/lib/taunts';
 
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function formatExerciseDetail(exercise: any): string {
+  if (exercise.type === 'duration') {
+    const secs = exercise.durationSeconds ?? 30;
+    return `${exercise.sets ?? 3} × ${secs >= 60 ? Math.floor(secs/60)+'m' : secs+'s'}`;
+  }
+  if (exercise.type === 'cardio') {
+    return `${Math.round((exercise.durationSeconds || 600) / 60)}m`;
+  }
+  return `${exercise.sets ?? 3}×${exercise.reps ?? 10}`;
+}
 
 const WORKOUT_FOCUS_IMAGES: Record<string, string> = {
   'Upper Body': 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Bench_Press_-_Medium_Grip/0.jpg',
@@ -56,9 +68,8 @@ export default function HomePage() {
         setPlan(p);
         let isRest = false;
         if (p) {
-          const dayOfWeek = new Date().getDay();
-          const dayNum = dayOfWeek === 0 ? 7 : dayOfWeek;
-          const td = p.days.find(d => d.dayNumber === dayNum) || null;
+          const todayDayName = DAY_NAMES[new Date().getDay()];
+          const td = p.days.find(d => d.dayName === todayDayName) || p.days[0];
           setToday(td);
           isRest = td?.isRest || false;
         }
@@ -223,9 +234,7 @@ export default function HomePage() {
                 </div>
                 <span className="today-hero-name">{ex.name}</span>
                 <span className="today-hero-badge">
-                  {ex.type === 'cardio'
-                    ? `${Math.round((ex.durationSeconds || 0) / 60)}m`
-                    : `${ex.sets}×${ex.reps}`}
+                  {formatExerciseDetail(ex)}
                 </span>
               </div>
             ))}

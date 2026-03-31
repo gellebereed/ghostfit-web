@@ -18,27 +18,56 @@ function getOrderedDays() {
   return { todayName, orderedDays };
 }
 
+function sanitizeExercise(ex: any): any {
+  const name = ex.name.toLowerCase();
+  
+  // Duration-based exercises — these have hold time, not reps
+  const durationExercises = [
+    'plank', 'wall sit', 'dead hang', 'l-sit', 'hollow hold',
+    'superman hold', 'bridge hold', 'side plank', 'horse stance',
+    'static hold', 'isometric'
+  ];
+  
+  const isDuration = durationExercises.some(d => name.includes(d));
+  
+  if (isDuration) {
+    return {
+      ...ex,
+      type: 'duration',
+      reps: 0,           // not applicable
+      durationSeconds: ex.durationSeconds ?? 30, // default 30s hold
+    };
+  }
+  
+  // Regular exercises — ensure reps is always a valid number
+  return {
+    ...ex,
+    reps: (ex.reps && !isNaN(ex.reps)) ? ex.reps : 10,
+    sets: (ex.sets && !isNaN(ex.sets)) ? ex.sets : 3,
+  };
+}
+
 export function sanitizePlan(plan: WorkoutPlan, userEquipment: string[]): WorkoutPlan {
   return {
     ...plan,
     days: plan.days.map(day => ({
       ...day,
       exercises: day.exercises.map(ex => {
+        let updatedEx = sanitizeExercise(ex);
+        
         // Fix "any", "none", "", undefined equipment
         if (
-          !ex.equipment ||
-          ex.equipment.toLowerCase() === 'any' ||
-          ex.equipment.toLowerCase() === 'none' ||
-          ex.equipment.toLowerCase() === 'n/a' ||
-          ex.equipment === ''
+          !updatedEx.equipment ||
+          updatedEx.equipment.toLowerCase() === 'any' ||
+          updatedEx.equipment.toLowerCase() === 'none' ||
+          updatedEx.equipment.toLowerCase() === 'n/a' ||
+          updatedEx.equipment === ''
         ) {
-          // Try to infer equipment from exercise name
-          const name = ex.name.toLowerCase();
+          const name = updatedEx.name.toLowerCase();
           const inferred = userEquipment.find(eq =>
             name.includes(eq.toLowerCase())
           );
           
-          // Cardio equipment mapping
           const cardioMap: Record<string, string> = {
             'treadmill': 'Treadmill',
             'run': 'Treadmill',
@@ -55,12 +84,9 @@ export function sanitizePlan(plan: WorkoutPlan, userEquipment: string[]): Workou
             name.includes(key)
           )?.[1];
           
-          return {
-            ...ex,
-            equipment: inferred ?? cardioEquip ?? userEquipment[0] ?? 'Bodyweight'
-          };
+          updatedEx.equipment = inferred ?? cardioEquip ?? userEquipment[0] ?? 'Bodyweight';
         }
-        return ex;
+        return updatedEx;
       })
     }))
   };
@@ -108,6 +134,15 @@ INTELLIGENT PLANNING RULES:
    - Build Muscle: moderate reps (8-12), 3-4 sets
    - Get Stronger: lower reps (4-6), heavier, 4-5 sets
    - Improve Fitness: mixed (10-15 reps), cardio emphasis
+
+5. For duration/hold exercises like Plank, Wall Sit, Dead Hang:
+   - Set type to 'duration'
+   - Set reps to 0  
+   - Add field: durationSeconds (e.g. 30 for a 30-second plank)
+   - Example: { "name": "Plank", "sets": 3, "reps": 0, "durationSeconds": 30, "type": "duration", "equipment": "Bodyweight" }
+   
+   NEVER return reps as null, undefined, or missing.
+   If unsure, default reps to 10.
 
 Return ONLY valid JSON, no markdown, no explanation:
 {
@@ -180,6 +215,7 @@ INTELLIGENT PLANNING RULES:
 2. WORKOUT STRUCTURE must follow muscle split rules.
 3. Only use exercises possible with available equipment.
 4. Scale sets/reps for goal.
+5. For duration/hold exercises like Plank, Wall Sit: set type to 'duration', reps to 0, and add durationSeconds.
 
 Return JSON matching the same format:
 {

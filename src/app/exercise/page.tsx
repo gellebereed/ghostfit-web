@@ -132,9 +132,8 @@ function ExerciseContent() {
     try {
       const plan = await getCurrentPlan();
       if (!plan) { router.replace('/'); return; }
-      const dayOfWeek = new Date().getDay();
-      const dayNum = dayOfWeek === 0 ? 7 : dayOfWeek;
-      const td = plan.days.find(d => d.dayNumber === dayNum);
+      const todayDayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date().getDay()];
+      const td = plan.days.find(d => d.dayName === todayDayName) || plan.days[0];
       if (!td || idx >= td.exercises.length) { router.replace('/workout'); return; }
       const ex = td.exercises[idx];
       setExercise(ex);
@@ -143,8 +142,8 @@ function ExerciseContent() {
       if (!g) {
         const profile = await getProfile();
         const goal = profile?.goal || 'Get Shredded';
-        const isCardioEx = ex.name.toLowerCase().includes('run') || ex.name.toLowerCase().includes('cycle') || ex.name.toLowerCase().includes('cardio');
-        const benchmark = getInitiationBenchmark(ex.name, isCardioEx ? 'cardio' : 'strength', goal);
+        const isCardioOrDuration = ex.type === 'cardio' || ex.type === 'duration';
+        const benchmark = getInitiationBenchmark(ex.name, isCardioOrDuration ? 'cardio' : 'strength', goal);
         g = {
           totalReps: benchmark.reps,
           avgWeight: benchmark.weight,
@@ -362,11 +361,11 @@ function ExerciseContent() {
   }
 
   if (!exercise) return <div className="loading"><div className="loader" /></div>;
-  const isCardio = exercise.type === 'cardio';
+  const isCardio = exercise.type === 'cardio' || exercise.type === 'duration';
   const ghostTarget = ghost ? (isCardio ? ghost.totalDuration : ghost.totalReps) : 0;
   const myScore = isCardio ? seconds : totalReps;
-  const ahead = ghost ? myScore > ghostTarget : false;
-  const tied = ghost ? myScore === ghostTarget : false;
+  const ahead = ghost && myScore > ghostTarget;
+  const tied = ghost && myScore === ghostTarget;
 
   const avatar = getAvatarPrefs();
   const yourEmoji = getCharEmoji(avatar.yourCharacterStyle);
@@ -682,7 +681,7 @@ function ExerciseContent() {
             </>
           ) : (
             <>
-              <div className="set-counter">Set {currentSet} of {exercise.sets}</div>
+              <div className="set-counter">Set {currentSet} of {exercise.sets ?? 3}</div>
               <div className="logger-inputs">
                 <div className="logger-field">
                   <label>Weight (kg)</label>
