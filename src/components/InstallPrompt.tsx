@@ -6,6 +6,7 @@ export default function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(true); // default true so we don't flash
+  const [showPWABanner, setShowPWABanner] = useState(false);
 
   useEffect(() => {
     setIsReady(true);
@@ -32,7 +33,16 @@ export default function InstallPrompt() {
     };
   }, []);
 
+  useEffect(() => {
+    const dismissed = localStorage.getItem('pwa_banner_dismissed');
+    if (!dismissed) {
+      const timer = setTimeout(() => setShowPWABanner(true), 30000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
   if (!isReady || isStandalone) return null;
+  if (!showPWABanner) return null;
 
   // Render nothing if not iOS and no android install prompt is caught yet
   if (!isIOS && !deferredPrompt) return null;
@@ -58,11 +68,22 @@ export default function InstallPrompt() {
           )}
         </div>
       </div>
-      {!isIOS && (
-        <button onClick={handleInstallClick} className="install-btn">
-          Install App
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {!isIOS && (
+          <button onClick={handleInstallClick} className="install-btn">
+            Install App
+          </button>
+        )}
+        <button
+          onPointerDown={() => {
+            setShowPWABanner(false);
+            localStorage.setItem('pwa_banner_dismissed', 'true');
+          }}
+          style={{ touchAction: 'manipulation', background: 'none', border: 'none', color: '#666', fontSize: '20px', padding: '0 8px', cursor: 'pointer' }}
+        >
+          ✕
         </button>
-      )}
+      </div>
     </div>
   );
 }

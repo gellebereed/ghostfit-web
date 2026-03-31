@@ -1,12 +1,60 @@
 'use client';
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { getCurrentPlan, getGhostForExercise, saveGhostSession, getWinCount, getAllSessions, getCachedExercise, cacheExercise, getStreak, getAllTimeBest, updateCachedVideoId } from '@/lib/db';
+import { getCurrentPlan, getGhostForExercise, saveGhostSession, getWinCount, getAllSessions, getCachedExercise, cacheExercise, getStreak, getAllTimeBest, updateCachedVideoId, getProfile } from '@/lib/db';
 import { Exercise, GhostSession, ExerciseInfo, calculateTier } from '@/lib/types';
 import { getAvatarPrefs, getCharEmoji } from '@/lib/avatar';
 import { checkMilestones, MilestoneEvent } from '@/lib/milestones';
 import { playSetComplete, playGhostBeaten, playGiveUp, playMilestone, hapticSetComplete, hapticGhostBeaten, hapticGiveUp, hapticMilestone } from '@/lib/sound';
-import YouTubePlayer from '@/components/YouTubePlayer';
+
+function getInitiationBenchmark(
+  exerciseName: string,
+  exerciseType: 'strength' | 'cardio',
+  goal: string
+): { reps: number; weight: number; duration: number } {
+  const benchmarks: Record<string, any> = {
+    'Get Shredded': { strength: { reps: 12, weight: 15, duration: 0 }, cardio: { reps: 0, weight: 0, duration: 20 * 60 } },
+    'Build Muscle': { strength: { reps: 10, weight: 20, duration: 0 }, cardio: { reps: 0, weight: 0, duration: 15 * 60 } },
+    'Get Stronger': { strength: { reps: 6, weight: 30, duration: 0 }, cardio: { reps: 0, weight: 0, duration: 10 * 60 } },
+    'Improve Fitness': { strength: { reps: 15, weight: 10, duration: 0 }, cardio: { reps: 0, weight: 0, duration: 25 * 60 } }
+  };
+  const base = benchmarks[goal]?.[exerciseType] ?? benchmarks['Get Shredded'][exerciseType];
+  return { reps: base.reps * 3, weight: base.weight, duration: base.duration };
+}
+
+function YouTubeEmbed({ videoId }: { videoId: string }) {
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
+
+  return (
+    <div className="relative w-full rounded-2xl overflow-hidden bg-[#141414]" style={{ aspectRatio: '16/9' }}>
+      {!loaded && !error && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 animate-pulse">
+          <div className="w-12 h-12 rounded-full bg-[#1F1F1F] flex items-center justify-center">
+            <span className="text-gray-600 text-xl">▶</span>
+          </div>
+          <p className="text-gray-700 text-xs uppercase tracking-widest font-bold">
+            Loading tutorial...
+          </p>
+        </div>
+      )}
+      <iframe
+        src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&playsinline=1`}
+        className={`w-full h-full transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+        allowFullScreen
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        onLoad={() => setLoaded(true)}
+        onError={() => setError(true)}
+      />
+      {error && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+          <span className="text-gray-600 text-2xl">📵</span>
+          <p className="text-gray-600 text-xs">Video unavailable</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ExerciseContent() {
   const router = useRouter();
@@ -36,6 +84,9 @@ function ExerciseContent() {
   const [arenaShake, setArenaShake] = useState(false);
   const [flash, setFlash] = useState(false);
   const [justScored, setJustScored] = useState(false);
+
+  // Bug Fix 1: Guard against double-taps
+  const processingRef = useRef(false);
 
   // Upgrade 2: GIF state
   const [gifUrl, setGifUrl] = useState<string | null>(null);
@@ -67,7 +118,19 @@ function ExerciseContent() {
       const ex = td.exercises[idx];
       setExercise(ex);
 
-      const g = await getGhostForExercise(ex.name);
+      let g = await getGhostForExercise(ex.name);
+      if (!g) {
+        const profile = await getProfile();
+        const goal = profile?.goal || 'Get Shredded';
+        const isCardioEx = ex.name.toLowerCase().includes('run') || ex.name.toLowerCase().includes('cycle') || ex.name.toLowerCase().includes('cardio');
+        const benchmark = getInitiationBenchmark(ex.name, isCardioEx ? 'cardio' : 'strength', goal);
+        g = {
+          totalReps: benchmark.reps,
+          avgWeight: benchmark.weight,
+          totalDuration: benchmark.duration,
+          isInitiation: true
+        } as any;
+      }
       setGhost(g);
       const wc = await getWinCount();
       setTotalWinsBefore(wc);
@@ -135,6 +198,9 @@ function ExerciseContent() {
 
   // Strength: complete a set
   function completeSet() {
+    if (processingRef.current) return;
+    processingRef.current = true;
+
     const r = parseInt(reps) || 0;
     const w = parseFloat(weight) || 0;
     setTotalReps(prev => prev + r);
@@ -159,6 +225,10 @@ function ExerciseContent() {
       setCurrentSet(prev => prev + 1);
       setReps('');
     }
+
+    setTimeout(() => {
+      processingRef.current = false;
+    }, 600);
   }
 
   // Cardio: timer
@@ -328,7 +398,7 @@ function ExerciseContent() {
             <div className="hb-col">
               <div className="hb-labels">
                 <span className="hb-ghost-info">{ghost ? (isCardio ? formatTime(ghostTarget) : `${ghostTarget} target`) : 'NO DATA'}</span>
-                <span className="hb-name ghost-name">{avatar.ghostCharacterName}</span>
+                <span className="hb-name ghost-name">{(ghost as any)?.isInitiation ? 'DAY 1 TARGET' : avatar.ghostCharacterName}</span>
               </div>
               <div className="hb-track">
                 <div className="hb-fill ghost-fill" style={{ width: ghost ? '100%' : '0%' }} />
@@ -376,6 +446,10 @@ function ExerciseContent() {
             <div className="fighter-center">
               {myScore === 0 && ghostTarget === 0 ? (
                 <div className="fc-dots"><div className="fc-dot" /><div className="fc-dot" /><div className="fc-dot" /></div>
+              ) : (ghost as any)?.isInitiation && myScore === 0 ? (
+                <div className="fc-status-behind">
+                  <span className="fc-status-text yellow" style={{fontSize: 9}}>SET YOUR BENCHMARK 🎯</span>
+                </div>
               ) : ahead ? (
                 <div className="fc-status-pulse">
                   <span className="fc-status-text green">WINNING</span>
@@ -408,21 +482,27 @@ function ExerciseContent() {
                     <img src={avatar.ghostPhotoUrl} alt="Ghost" className="fc-photo ghost-photo" />
                   ) : (
                     <svg viewBox="0 0 60 70" width="60" height="70" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M 15 35 Q 15 15 30 10 Q 45 15 45 35 L 45 60 Q 40 55 35 60 Q 30 55 25 60 Q 20 55 15 60 Z"
-                        fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
-                      <circle cx="25" cy="28" r="4" fill="rgba(255,255,255,0.6)"/>
-                      <circle cx="35" cy="28" r="4" fill="rgba(255,255,255,0.6)"/>
-                      <circle cx="26" cy="29" r="2" fill="#0A0A0A"/>
-                      <circle cx="36" cy="29" r="2" fill="#0A0A0A"/>
-                      {!ahead ? (
-                        <path d="M 24 36 Q 30 40 36 36" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+                      {(ghost as any)?.isInitiation ? (
+                        <text x="30" y="45" textAnchor="middle" fontSize="30" fill="rgba(255,255,255,0.4)">🎯</text>
                       ) : (
-                        <path d="M 24 38 Q 30 34 36 38" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+                        <g>
+                          <path d="M 15 35 Q 15 15 30 10 Q 45 15 45 35 L 45 60 Q 40 55 35 60 Q 30 55 25 60 Q 20 55 15 60 Z"
+                            fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
+                          <circle cx="25" cy="28" r="4" fill="rgba(255,255,255,0.6)"/>
+                          <circle cx="35" cy="28" r="4" fill="rgba(255,255,255,0.6)"/>
+                          <circle cx="26" cy="29" r="2" fill="#0A0A0A"/>
+                          <circle cx="36" cy="29" r="2" fill="#0A0A0A"/>
+                          {!ahead ? (
+                            <path d="M 24 36 Q 30 40 36 36" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+                          ) : (
+                            <path d="M 24 38 Q 30 34 36 38" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+                          )}
+                        </g>
                       )}
                     </svg>
                   )}
                 </div>
-                {ahead && <div className="fc-defeated">💀</div>}
+                {ahead && !(ghost as any)?.isInitiation && <div className="fc-defeated">💀</div>}
               </div>
               <div className="fc-label ghost-label">{avatar.ghostCharacterName}</div>
             </div>
@@ -447,11 +527,11 @@ function ExerciseContent() {
         <div className="gif-section">
           <div className="gif-label tutorial-label">TUTORIAL</div>
           {videoLoading ? (
-            <div className="yt-player-wrap">
+            <div className="relative w-full rounded-2xl overflow-hidden bg-[#141414]" style={{ aspectRatio: '16/9' }}>
               <div className="gif-shimmer" style={{ height: '100%' }} />
             </div>
           ) : videoId ? (
-            <YouTubePlayer videoId={videoId} />
+            <YouTubeEmbed videoId={videoId} />
           ) : (
             // Fallback: show premium GIF if video unavailable
             gifLoading ? (
@@ -530,7 +610,12 @@ function ExerciseContent() {
                   <input type="number" inputMode="numeric" placeholder="0" value={reps} onChange={e => setReps(e.target.value)} />
                 </div>
               </div>
-              <button className="btn-primary" onClick={completeSet} disabled={!reps}>
+              <button
+                className="btn-primary"
+                onPointerDown={completeSet}
+                disabled={false}
+                style={{ touchAction: 'manipulation' }}
+              >
                 Complete Set ✓
               </button>
             </>
