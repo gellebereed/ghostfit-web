@@ -19,8 +19,10 @@ export default function ProfilePage() {
   const [tier, setTier] = useState(1);
   const [signingOut, setSigningOut] = useState(false);
   const [savingWeight, setSavingWeight] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => { 
+    setMounted(true);
     refreshProfile().then(load); 
   }, [refreshProfile]);
 
@@ -60,7 +62,7 @@ export default function ProfilePage() {
     }
   }
 
-  if (!profile) return <div className="loading"><div className="loader" /></div>;
+  if (!mounted || !profile) return <div className="loading"><div className="loader" /></div>;
 
   const nextTierThreshold = TIER_THRESHOLDS[tier] || 25;
   const prevTierThreshold = TIER_THRESHOLDS[tier - 1] || 0;

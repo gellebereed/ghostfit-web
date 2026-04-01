@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { getCharEmoji } from '@/lib/avatar';
 import { UserProfile } from '@/lib/types';
@@ -45,6 +46,8 @@ export function Avatar({
     ? { boxShadow: `0 0 20px ${auraColor}60` }
     : {};
 
+  const [imgError, setImgError] = useState(false);
+
   return (
     <div
       className={`relative rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center ${className ?? ''}`}
@@ -57,12 +60,13 @@ export function Avatar({
         ...glowStyle
       }}
     >
-      {usesPhoto && photoUrl ? (
+      {usesPhoto && photoUrl && !imgError ? (
         <img
           src={photoUrl}
           alt={name}
           className="w-full h-full object-cover"
           style={!isUser ? { filter: 'grayscale(20%) blur(0.3px)' } : {}}
+          onError={() => setImgError(true)}
         />
       ) : (
         <div

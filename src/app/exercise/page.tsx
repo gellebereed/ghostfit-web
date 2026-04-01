@@ -5,6 +5,7 @@ import { getCurrentPlan, getGhostForExercise, saveGhostSession, getWinCount, get
 import { Exercise, GhostSession, ExerciseInfo, calculateTier } from '@/lib/types';
 import { useAppStore } from '@/store/appStore';
 import { Avatar } from '@/components/Avatar';
+import { SmartLogger } from '@/components/SmartLogger';
 import { checkMilestones, MilestoneEvent } from '@/lib/milestones';
 import { playSetComplete, playGhostBeaten, playGiveUp, playMilestone, hapticSetComplete, hapticGhostBeaten, hapticGiveUp, hapticMilestone } from '@/lib/sound';
 import { arcadeSounds, initAudio } from '@/utils/arcadeSounds';
@@ -99,6 +100,20 @@ function ExerciseContent() {
   const [flash, setFlash] = useState(false);
   const [justScored, setJustScored] = useState(false);
 
+  // State for rest timer
+  const [isResting, setIsResting] = useState(false);
+  const [restSeconds, setRestSeconds] = useState(0);
+  const restIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  function getRestDuration(goal: string): number {
+    return ({
+      'Get Stronger':    120,
+      'Build Muscle':     90,
+      'Get Shredded':     45,
+      'Improve Fitness':  60,
+    } as Record<string, number>)[goal] ?? 60;
+  }
+
   // Bug Fix 1: Guard against double-taps
   const processingRef = useRef(false);
 
@@ -123,11 +138,17 @@ function ExerciseContent() {
   const comboTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
+  // Video fallback state
+  const [videoBlocked, setVideoBlocked] = useState(false);
+
   useEffect(() => {
     document.addEventListener('pointerdown', initAudio, { once: true });
     setSoundEnabled(localStorage.getItem('ghostfit_sound_enabled') !== 'false');
     refreshProfile().then(load);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    return () => { 
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (restIntervalRef.current) clearInterval(restIntervalRef.current);
+    };
   }, [refreshProfile]);
 
   async function load() {
@@ -144,7 +165,7 @@ function ExerciseContent() {
       if (!g) {
         const profile = await getProfile();
         const goal = profile?.goal || 'Get Shredded';
-        const isCardioOrDuration = ex.type === 'cardio' || ex.type === 'duration';
+        const isCardioOrDuration = ex.type === 'cardio' || ex.metricType === 'duration';
         const benchmark = getInitiationBenchmark(ex.name, isCardioOrDuration ? 'cardio' : 'strength', goal);
         g = {
           totalReps: benchmark.reps,
@@ -220,16 +241,27 @@ function ExerciseContent() {
     setVideoLoading(false);
   }
 
-  // Strength: complete a set
-  function completeSet() {
-    if (processingRef.current) return;
-    processingRef.current = true;
+  function addSetToSession(data: any) {
+    const r = data.reps || 0;
+    const w = data.weight || 0;
+    const d = data.duration || 0;
 
-    const r = parseInt(reps) || 0;
-    const w = parseFloat(weight) || 0;
-    setTotalReps(prev => prev + r);
-    setWeights(prev => [...prev, w]);
-    setSetsCompleted(prev => prev + 1);
+    if (exercise?.metricType === 'cardio') {
+      setSeconds(d);
+      finishExercise(0, 1, 0, d);
+      return;
+    }
+
+    if (exercise?.metricType === 'duration') {
+      setTotalReps(prev => prev + 1); // treat 1 hold as 1 rep for arena
+      setSeconds(prev => prev + d);
+      setSetsCompleted(prev => prev + 1);
+    } else {
+      setTotalReps(prev => prev + r);
+      setWeights(prev => [...prev, w]);
+      setSetsCompleted(prev => prev + 1);
+    }
+
     playSetComplete();
     hapticSetComplete();
     if (soundEnabled) arcadeSounds.setComplete();
@@ -241,24 +273,54 @@ function ExerciseContent() {
     if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
     comboTimerRef.current = setTimeout(() => setShowCombo(null), 1200);
 
-    if (ghost && totalReps + r > ghost.totalReps) {
+    const score = exercise?.metricType === 'duration' ? (seconds + d) : (totalReps + r);
+    if (ghost && score > ghostTarget) {
       setFlash(true);
       setTimeout(() => setFlash(false), 500);
-    } else if (ghost && totalReps + r === ghost.totalReps) {
+    } else if (ghost && score === ghostTarget) {
       setArenaShake(true);
       setTimeout(() => setArenaShake(false), 300);
     }
+  }
+
+  function handleSetComplete(data: any) {
+    addSetToSession(data);
 
     if (currentSet >= (exercise?.sets || 3)) {
-      finishExercise(totalReps + r, setsCompleted + 1, w);
-    } else {
-      setCurrentSet(prev => prev + 1);
-      setReps('');
+      if (exercise?.metricType !== 'cardio') {
+        const r = data.reps || 0;
+        const w = data.weight || 0;
+        const d = data.duration || 0;
+        finishExercise(totalReps + r, setsCompleted + 1, w, seconds + d);
+      }
+      return;
     }
 
-    setTimeout(() => {
-      processingRef.current = false;
-    }, 600);
+    setCurrentSet(s => s + 1);
+
+    const mt = exercise?.metricType;
+    if (mt === 'cardio' || mt === 'duration') return;
+
+    const duration = getRestDuration(profile?.goal ?? 'Build Muscle');
+    setRestSeconds(duration);
+    setIsResting(true);
+
+    if (restIntervalRef.current) clearInterval(restIntervalRef.current);
+    restIntervalRef.current = setInterval(() => {
+      setRestSeconds(s => {
+        if (s <= 1) {
+          clearInterval(restIntervalRef.current!);
+          setIsResting(false);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+  }
+
+  function handleSkipRest() {
+    if (restIntervalRef.current) clearInterval(restIntervalRef.current);
+    setIsResting(false);
   }
 
   // Cardio: timer
@@ -363,7 +425,7 @@ function ExerciseContent() {
   }
 
   if (!exercise) return <div className="loading"><div className="loader" /></div>;
-  const isCardio = exercise.type === 'cardio' || exercise.type === 'duration';
+  const isCardio = exercise.type === 'cardio' || exercise.metricType === 'duration';
   const ghostTarget = ghost ? (isCardio ? ghost.totalDuration : ghost.totalReps) : 0;
   const myScore = isCardio ? seconds : totalReps;
   const ahead = ghost && myScore > ghostTarget;
@@ -557,53 +619,66 @@ function ExerciseContent() {
           <h2>{exercise.name}</h2>
         </div>
 
-        {/* Tutorial section — full bleed, no side padding */}
-        <div className="mb-5 -mx-4 sm:-mx-5" style={{ marginBottom: 20 }}>
-          <div className="px-4 sm:px-5 mb-2" style={{ padding: '0 20px', marginBottom: 8 }}>
-            <p style={{ color: 'var(--accent)', fontSize: 11, fontWeight: '900', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
-              TUTORIAL
+        {/* Tutorial — full bleed, breaks out of parent padding */}
+        <div className="mb-6"
+             style={{ marginLeft: '-1.25rem', marginRight: '-1.25rem' }}>
+
+          <div className="px-5 mb-2 flex items-center justify-between">
+            <p className="text-[#00FF87] text-[11px] font-black
+                          tracking-widest uppercase">
+              Tutorial
             </p>
+            {videoId && (
+              <p className="text-gray-700 text-[10px]">YouTube</p>
+            )}
           </div>
-          
-          <div className="w-full bg-[#141414]" style={{ aspectRatio: '16/9', width: '100%', position: 'relative', overflow: 'hidden' }}>
-            {videoLoading ? (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-3 animate-pulse">
-                <div className="w-12 h-12 rounded-full bg-[#1F1F1F] flex items-center justify-center">
-                  <span className="text-gray-600 text-xl">▶</span>
+
+          <div className="relative w-full bg-[#141414]"
+               style={{ aspectRatio: '16/9' }}>
+
+            {/* Skeleton while loading */}
+            {videoLoading && (
+              <div className="absolute inset-0 flex flex-col items-center
+                              justify-center gap-3 animate-pulse">
+                <div className="w-14 h-14 rounded-full bg-[#1F1F1F]
+                                flex items-center justify-center">
+                  <span className="text-gray-700 text-2xl">▶</span>
                 </div>
                 <p className="text-gray-700 text-xs uppercase tracking-widest font-bold">
                   Loading tutorial...
                 </p>
               </div>
-            ) : videoId ? (
-              <YouTubeEmbed videoId={videoId} />
-            ) : gifUrl ? (
-              <div className="gif-premium" style={{ margin: 0, borderRadius: 0, height: '100%' }}>
-                <img src={gifUrl} alt={`${exercise.name} demonstration`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                <div className="gif-vignette" />
-              </div>
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
+            )}
+
+            {/* YouTube — no border, no radius, edge to edge */}
+            {videoId && !videoBlocked && (
+              <iframe
+                src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&playsinline=1`}
+                className={`absolute inset-0 w-full h-full transition-opacity duration-300
+                  ${videoLoading ? 'opacity-0' : 'opacity-100'}`}
+                style={{ border: 'none' }}
+                allowFullScreen
+                allow="accelerometer; autoplay; clipboard-write;
+                       encrypted-media; gyroscope; picture-in-picture"
+                onLoad={() => setVideoLoading(false)}
+                onError={() => { setVideoBlocked(true); setVideoLoading(false) }}
+              />
+            )}
+
+            {/* GIF fallback */}
+            {(videoBlocked || !videoId) && gifUrl && !videoLoading && (
+              <img src={gifUrl} alt={`${exercise.name} demonstration`}
+                   className="absolute inset-0 w-full h-full object-cover"
+              />
+            )}
+
+            {/* No media at all */}
+            {(videoBlocked || !videoId) && !gifUrl && !videoLoading && (
+              <div className="absolute inset-0 flex items-center justify-center">
                 <p className="text-gray-600 text-sm">No tutorial available</p>
               </div>
             )}
           </div>
-          
-          {/* GIF shown below video as form reference — only if video exists */}
-          {gifUrl && videoId && (
-            <div className="px-4 sm:px-5 mt-3" style={{ padding: '0 20px', marginTop: 12 }}>
-              <p style={{ color: 'var(--text3)', fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-                FORM REFERENCE
-              </p>
-              <div className="gif-premium" style={{ margin: 0, borderRadius: 16 }}>
-                <img src={gifUrl} alt={`${exercise.name} form`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                <div className="gif-vignette" />
-                <div className="gif-badge">
-                  <p>Proper Form</p>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Instructions */}
@@ -623,47 +698,31 @@ function ExerciseContent() {
           </div>
         )}
 
-        {/* Logger */}
-        <div className="logger">
-          {isCardio ? (
-            <>
-              <div className="timer-display">{formatTime(seconds)}</div>
-              <div className="timer-controls">
-                {!timerRunning ? (
-                  <button className="timer-btn start" onClick={startTimer}>▶ Start</button>
-                ) : (
-                  <button className="timer-btn pause" onClick={pauseTimer}>⏸ Pause</button>
-                )}
-                <button className="timer-btn stop" onClick={stopTimer}>⏹ Finish</button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="set-counter">Set {currentSet} of {exercise.sets ?? 3}</div>
-              <div className="logger-inputs">
-                <div className="logger-field">
-                  <label>Weight (kg)</label>
-                  <input type="number" inputMode="decimal" placeholder="0" value={weight} onChange={e => setWeight(e.target.value)} />
-                </div>
-                <div className="logger-field">
-                  <label>Reps</label>
-                  <input type="number" inputMode="numeric" placeholder="0" value={reps} onChange={e => setReps(e.target.value)} />
-                </div>
-              </div>
-              <button
-                className="btn-primary"
-                onPointerDown={completeSet}
-                disabled={false}
-                style={{ touchAction: 'manipulation' }}
-              >
-                Complete Set ✓
-              </button>
-            </>
-          )}
+        {/* Smart Logger area — fixed at bottom or scrollable based on content */}
+        <div className="logger mt-auto border-t border-white/5 bg-black/40 backdrop-blur-md">
+          <SmartLogger
+            exercise={exercise}
+            currentSet={currentSet}
+            onSetComplete={handleSetComplete}
+            ghostDuration={ghost?.totalDuration ?? 0}
+            isResting={isResting}
+            restSeconds={restSeconds}
+            onSkipRest={handleSkipRest}
+          />
         </div>
 
-        <div style={{ textAlign: 'right', padding: '8px 20px' }}>
-          <button className="btn-ghost" onClick={() => setShowGiveUp(true)}>End Early</button>
+        {/* Bottom utility bar */}
+        <div className="flex justify-between items-center px-5 py-6 border-t border-white/5 bg-black/60">
+          <button 
+            className="text-[10px] font-black text-gray-600 hover:text-red-500 transition-colors tracking-widest uppercase"
+            onClick={() => setShowGiveUp(true)}
+          >
+            End Workout Early
+          </button>
+          
+          <div className="text-[9px] text-gray-700 font-mono uppercase tracking-[0.2em] opacity-50">
+            SYSTEM V1.4 // {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </div>
         </div>
       </div>
     </>

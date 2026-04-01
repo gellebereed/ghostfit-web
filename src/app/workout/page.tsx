@@ -10,14 +10,21 @@ import PostWorkoutRecap from '@/components/PostWorkoutRecap';
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 function formatExerciseDetail(exercise: any): string {
-  if (exercise.type === 'duration') {
-    const secs = exercise.durationSeconds ?? 30;
-    return `${exercise.sets ?? 3} × ${secs >= 60 ? Math.floor(secs/60)+'m' : secs+'s'}`;
+  const m = exercise.metricType || (exercise.type === 'cardio' ? 'cardio' : (exercise.type === 'duration' ? 'duration' : 'weight_reps'));
+  
+  if (m === 'duration' || m === 'cardio') {
+    const secs = exercise.durationSeconds ?? (m === 'cardio' ? 600 : 30);
+    const display = secs >= 60 
+      ? `${Math.floor(secs/60)}m${secs%60 > 0 ? ' '+(secs%60)+'s' : ''}`.trim()
+      : `${secs}s`;
+    
+    if (m === 'cardio') return `${display} workout`;
+    return `${exercise.sets ?? 3} × ${display}`;
   }
-  if (exercise.type === 'cardio') {
-    return `${Math.round((exercise.durationSeconds || 300) / 60)} min`;
-  }
-  return `${exercise.sets ?? 3} × ${exercise.reps ?? 10} reps`;
+  
+  const reps = exercise.reps ?? 10;
+  const sets = exercise.sets ?? 3;
+  return `${sets} × ${reps} reps`;
 }
 
 const WORKOUT_FOCUS_IMAGES: Record<string, string> = {
@@ -27,7 +34,7 @@ const WORKOUT_FOCUS_IMAGES: Record<string, string> = {
   'Pull':       'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Curl/0.jpg',
   'Legs':       'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Full_Squat/0.jpg',
   'Core':       'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Ab_Crunch_Machine/0.jpg',
-  'Cardio':     'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Jogging,_Treadmill/0.jpg',
+  'Cardio':     'https://images.unsplash.com/photo-1538805060514-97d9cc17730c?auto=format&fit=crop&w=400&q=80',
   'Full Body':  'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Deadlift/0.jpg',
 };
 

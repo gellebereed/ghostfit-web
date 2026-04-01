@@ -18,32 +18,78 @@ function getOrderedDays() {
   return { todayName, orderedDays };
 }
 
-function sanitizeExercise(ex: any): any {
-  const name = ex.name.toLowerCase();
-  
-  // Duration-based exercises — these have hold time, not reps
-  const durationExercises = [
-    'plank', 'wall sit', 'dead hang', 'l-sit', 'hollow hold',
-    'superman hold', 'bridge hold', 'side plank', 'horse stance',
-    'static hold', 'isometric'
-  ];
-  
-  const isDuration = durationExercises.some(d => name.includes(d));
-  
-  if (isDuration) {
-    return {
-      ...ex,
-      type: 'duration',
-      reps: 0,           // not applicable
-      durationSeconds: ex.durationSeconds ?? 30, // default 30s hold
+export function sanitizeExercise(
+  ex: any,
+  userEquipment: string[]
+): any {
+  // Fix missing/invalid equipment
+  let equipment = ex.equipment;
+  if (
+    !equipment ||
+    ['any', 'none', 'n/a', ''].includes(equipment.toLowerCase())
+  ) {
+    const name = ex.name.toLowerCase();
+    const cardioEquipMap: Record<string, string> = {
+      'treadmill': 'Treadmill', 'run': 'Treadmill', 'jog': 'Treadmill',
+      'cycling': 'Spin Bike', 'bike': 'Spin Bike',
+      'rowing': 'Rowing Machine', 'row': 'Rowing Machine',
+      'jump rope': 'Jump Rope', 'skip': 'Jump Rope',
+      'elliptical': 'Elliptical',
     };
+    const cardioMatch = Object.entries(cardioEquipMap)
+      .find(([k]) => name.includes(k))?.[1];
+    const userMatch = userEquipment.find(eq =>
+      name.includes(eq.toLowerCase())
+    );
+    equipment = userMatch ?? cardioMatch ?? userEquipment[0] ?? 'Bodyweight';
   }
-  
-  // Regular exercises — ensure reps is always a valid number
+
+  // Backfill metricType if AI forgot it (fallback only)
+  let metricType = ex.metricType;
+  if (!metricType) {
+    const n = ex.name.toLowerCase();
+    if (ex.type === 'cardio' ||
+        ['treadmill','rowing','cycling','bike','elliptical','skip','run','jog']
+        .some(k => n.includes(k))) {
+      metricType = 'cardio';
+    } else if (['plank','wall sit','dead hang','hold','static','isometric']
+        .some(k => n.includes(k))) {
+      metricType = 'duration';
+    } else if (['push-up','pull-up','dip','sit-up','crunch','bodyweight squat']
+        .some(k => n.includes(k)) ||
+        equipment.toLowerCase().includes('bodyweight')) {
+      metricType = 'bodyweight_reps';
+    } else if (['burpee','box jump','jumping jack','mountain climber']
+        .some(k => n.includes(k))) {
+      metricType = 'reps_only';
+    } else {
+      metricType = 'weight_reps';
+    }
+  }
+
+  // Fix reps and durationSeconds based on metricType
+  let reps = ex.reps;
+  let durationSeconds = ex.durationSeconds;
+
+  if (metricType === 'duration') {
+    reps = 0;
+    durationSeconds = durationSeconds ?? 30;
+  } else if (metricType === 'cardio') {
+    reps = 0;
+    durationSeconds = durationSeconds ?? 1200;
+  } else {
+    durationSeconds = null;
+    reps = reps && !isNaN(Number(reps)) && Number(reps) > 0
+      ? Number(reps) : 10;
+  }
+
   return {
     ...ex,
-    reps: (ex.reps && !isNaN(ex.reps)) ? ex.reps : 10,
-    sets: (ex.sets && !isNaN(ex.sets)) ? ex.sets : 3,
+    equipment,
+    metricType,
+    reps,
+    durationSeconds,
+    sets: ex.sets && !isNaN(Number(ex.sets)) ? Number(ex.sets) : 3,
   };
 }
 
@@ -52,42 +98,7 @@ export function sanitizePlan(plan: WorkoutPlan, userEquipment: string[]): Workou
     ...plan,
     days: plan.days.map(day => ({
       ...day,
-      exercises: day.exercises.map(ex => {
-        let updatedEx = sanitizeExercise(ex);
-        
-        // Fix "any", "none", "", undefined equipment
-        if (
-          !updatedEx.equipment ||
-          updatedEx.equipment.toLowerCase() === 'any' ||
-          updatedEx.equipment.toLowerCase() === 'none' ||
-          updatedEx.equipment.toLowerCase() === 'n/a' ||
-          updatedEx.equipment === ''
-        ) {
-          const name = updatedEx.name.toLowerCase();
-          const inferred = userEquipment.find(eq =>
-            name.includes(eq.toLowerCase())
-          );
-          
-          const cardioMap: Record<string, string> = {
-            'treadmill': 'Treadmill',
-            'run': 'Treadmill',
-            'jog': 'Treadmill',
-            'cycling': 'Spin Bike',
-            'bike': 'Spin Bike',
-            'rowing': 'Rowing Machine',
-            'row': 'Rowing Machine',
-            'jump rope': 'Jump Rope',
-            'skip': 'Jump Rope',
-          };
-          
-          const cardioEquip = Object.entries(cardioMap).find(([key]) =>
-            name.includes(key)
-          )?.[1];
-          
-          updatedEx.equipment = inferred ?? cardioEquip ?? userEquipment[0] ?? 'Bodyweight';
-        }
-        return updatedEx;
-      })
+      exercises: day.exercises.map(ex => sanitizeExercise(ex, userEquipment))
     }))
   };
 }
@@ -135,14 +146,48 @@ INTELLIGENT PLANNING RULES:
    - Get Stronger: lower reps (4-6), heavier, 4-5 sets
    - Improve Fitness: mixed (10-15 reps), cardio emphasis
 
-5. For duration/hold exercises like Plank, Wall Sit, Dead Hang:
-   - Set type to 'duration'
-   - Set reps to 0  
-   - Add field: durationSeconds (e.g. 30 for a 30-second plank)
-   - Example: { "name": "Plank", "sets": 3, "reps": 0, "durationSeconds": 30, "type": "duration", "equipment": "Bodyweight" }
-   
-   NEVER return reps as null, undefined, or missing.
-   If unsure, default reps to 10.
+5. METRIC TYPE — include metricType for EVERY exercise.
+Base it on how the exercise is truly performed:
+
+'weight_reps' → user lifts a weighted object and counts reps
+  Use for: any dumbbell, barbell, cable, machine, 
+  kettlebell, or plate-loaded exercise
+
+'bodyweight_reps' → uses only bodyweight, counted in reps
+  Use for: push-ups, pull-ups, chin-ups, dips,
+  bodyweight squats, sit-ups, crunches, lunges (no weight),
+  step-ups (no weight), nordic curls, inverted rows,
+  glute bridges (no weight), hip thrusts (no weight)
+
+'duration' → held for time, NOT counted by reps
+  Use for: plank, side plank, wall sit, dead hang,
+  L-sit, hollow hold, hollow body, superman hold,
+  any exercise with the word 'hold' or 'static' or 'isometric'
+
+'cardio' → sustained continuous movement measured in time
+  Use for: treadmill, running, jogging, walking on treadmill,
+  rowing machine, Concept2 rower, spin bike, stationary bike,
+  assault bike, air bike, elliptical, stair climber,
+  stair master, ski erg, jump rope session,
+  ANY machine the user runs/rows/cycles on continuously
+
+'reps_only' → explosive bodyweight movement counted by reps
+  Use for: burpees, box jumps, broad jumps, jumping jacks,
+  high knees, mountain climbers, star jumps, tuck jumps,
+  battle ropes (counted by rounds)
+
+DURATION FIELDS:
+- metricType 'duration' → durationSeconds = recommended hold 
+  time in seconds (e.g. 30 for beginner plank, 45 for intermediate)
+  AND reps = 0
+- metricType 'cardio' → durationSeconds = recommended session 
+  duration in seconds (e.g. 1200 for 20 minutes, 600 for 10 minutes)
+  AND reps = 0 AND sets = 1
+- All other metricTypes → durationSeconds = null
+
+NEVER omit metricType. Every exercise must have it.
+NEVER set equipment to 'any', 'none', or leave it empty.
+Always use the actual equipment from the user's list.
 
 Return ONLY valid JSON, no markdown, no explanation:
 {
@@ -156,11 +201,31 @@ Return ONLY valid JSON, no markdown, no explanation:
       "isRest": false,
       "exercises": [
         {
-          "name": "Dumbbell Bench Press",
-          "sets": 4,
-          "reps": 10,
+          "name": "Dumbbell Bicep Curl",
+          "sets": 3,
+          "reps": 12,
           "equipment": "Dumbbells",
-          "type": "strength"
+          "type": "strength",
+          "metricType": "weight_reps",
+          "durationSeconds": null
+        },
+        {
+          "name": "Plank",
+          "sets": 3,
+          "reps": 0,
+          "equipment": "Bodyweight",
+          "type": "strength",
+          "metricType": "duration",
+          "durationSeconds": 30
+        },
+        {
+          "name": "Treadmill Run",
+          "sets": 1,
+          "reps": 0,
+          "equipment": "Treadmill",
+          "type": "cardio",
+          "metricType": "cardio",
+          "durationSeconds": 1200
         }
       ]
     }
@@ -215,7 +280,49 @@ INTELLIGENT PLANNING RULES:
 2. WORKOUT STRUCTURE must follow muscle split rules.
 3. Only use exercises possible with available equipment.
 4. Scale sets/reps for goal.
-5. For duration/hold exercises like Plank, Wall Sit: set type to 'duration', reps to 0, and add durationSeconds.
+
+5. METRIC TYPE — include metricType for EVERY exercise.
+Base it on how the exercise is truly performed:
+
+'weight_reps' → user lifts a weighted object and counts reps
+  Use for: any dumbbell, barbell, cable, machine, 
+  kettlebell, or plate-loaded exercise
+
+'bodyweight_reps' → uses only bodyweight, counted in reps
+  Use for: push-ups, pull-ups, chin-ups, dips,
+  bodyweight squats, sit-ups, crunches, lunges (no weight),
+  step-ups (no weight), nordic curls, inverted rows,
+  glute bridges (no weight), hip thrusts (no weight)
+
+'duration' → held for time, NOT counted by reps
+  Use for: plank, side plank, wall sit, dead hang,
+  L-sit, hollow hold, hollow body, superman hold,
+  any exercise with the word 'hold' or 'static' or 'isometric'
+
+'cardio' → sustained continuous movement measured in time
+  Use for: treadmill, running, jogging, walking on treadmill,
+  rowing machine, Concept2 rower, spin bike, stationary bike,
+  assault bike, air bike, elliptical, stair climber,
+  stair master, ski erg, jump rope session,
+  ANY machine the user runs/rows/cycles on continuously
+
+'reps_only' → explosive bodyweight movement counted by reps
+  Use for: burpees, box jumps, broad jumps, jumping jacks,
+  high knees, mountain climbers, star jumps, tuck jumps,
+  battle ropes (counted by rounds)
+
+DURATION FIELDS:
+- metricType 'duration' → durationSeconds = recommended hold 
+  time in seconds (e.g. 30 for beginner plank, 45 for intermediate)
+  AND reps = 0
+- metricType 'cardio' → durationSeconds = recommended session 
+  duration in seconds (e.g. 1200 for 20 minutes, 600 for 10 minutes)
+  AND reps = 0 AND sets = 1
+- All other metricTypes → durationSeconds = null
+
+NEVER omit metricType. Every exercise must have it.
+NEVER set equipment to 'any', 'none', or leave it empty.
+Always use the actual equipment from the user's list.
 
 Return JSON matching the same format:
 {

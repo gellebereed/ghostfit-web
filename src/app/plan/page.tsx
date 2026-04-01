@@ -30,7 +30,7 @@ const dayNames = [
 ];
 
 function formatExerciseDetail(exercise: Exercise): string {
-  if (exercise.type === 'duration') {
+  if (exercise.metricType === 'duration') {
     const secs = exercise.durationSeconds ?? 30;
     const display = secs >= 60 
       ? `${Math.floor(secs/60)}min ${secs%60 > 0 ? secs%60+'s' : ''}`.trim()
@@ -275,6 +275,7 @@ export default function PlanPage() {
         reps: type === 'cardio' ? 1 : 10,
         durationSeconds: type === 'cardio' ? 600 : 0,
         type: type as any,
+        metricType: (type === 'cardio' ? 'cardio' : 'weight_reps') as any,
         equipment: typeof item === 'string' ? newExEquipment : item.equipmentNeeded || newExEquipment
       }]
     })};

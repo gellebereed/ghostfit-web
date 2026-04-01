@@ -5,8 +5,9 @@ export interface Exercise {
   sets: number;
   reps: number;
   equipment: string;
-  type: 'strength' | 'cardio' | 'duration';
-  durationSeconds?: number; // for cardio and duration
+  type: 'strength' | 'cardio';
+  metricType: 'weight_reps' | 'bodyweight_reps' | 'duration' | 'cardio' | 'reps_only';
+  durationSeconds: number | null;
 }
 
 export interface WorkoutDay {
