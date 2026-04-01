@@ -12,14 +12,16 @@ const GOALS = [
 export default function GoalPage() {
   const router = useRouter();
   const [selected, setSelected] = useState('');
+  const [weightKg, setWeightKg] = useState<number>(75);
 
   function handleNext() {
     sessionStorage.setItem('ghostfit_goal', selected);
+    sessionStorage.setItem('ghostfit_weight', weightKg.toString());
     router.push('/onboarding/plan');
   }
 
   return (
-    <div className="page">
+    <div className="page" style={{ paddingBottom: 120 }}>
       <header className="hdr" style={{ background: 'transparent', border: 'none' }}>
         <button className="hdr-back" onClick={() => router.back()}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
@@ -47,9 +49,34 @@ export default function GoalPage() {
         </div>
       ))}
 
-      <button className="btn-primary" disabled={!selected} onClick={handleNext} style={{ marginTop: 24 }}>
+      {selected && (
+        <div style={{ marginTop: 32, animation: 'fadeIn 0.5s ease forwards' }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Body Weight (kg)</h2>
+          <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16 }}>Optional — used for accurate calorie tracking</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', padding: '16px 20px', borderRadius: 'var(--r)', border: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 24 }}>⚖️</span>
+            <input 
+              type="number" 
+              value={weightKg} 
+              onChange={(e) => setWeightKg(parseFloat(e.target.value) || 0)}
+              placeholder="75"
+              style={{ flex: 1, background: 'transparent', border: 'none', color: 'var(--text)', fontSize: 20, fontWeight: 700, outline: 'none' }}
+            />
+            <span style={{ fontWeight: 600, color: 'var(--text3)' }}>KG</span>
+          </div>
+        </div>
+      )}
+
+      <button className="btn-primary" disabled={!selected} onClick={handleNext} style={{ marginTop: 40 }}>
         Next →
       </button>
+
+      <style jsx>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   );
 }

@@ -29,14 +29,19 @@ export default function PlanPage() {
       const plan = await res.json();
 
       setStatus('Saving your plan...');
+      const weightKg = parseFloat(sessionStorage.getItem('ghostfit_weight') || '75');
+
       await savePlan({ ...plan, createdAt: Date.now() });
       await saveProfile({
         equipment, goal, currentWeek: 1, onboardingComplete: true, createdAt: Date.now(),
         soulCoins: 0, unlockedCosmetics: [], equippedCosmetics: {},
+        weight_kg: weightKg,
+        current_streak: 0,
       });
 
       sessionStorage.removeItem('ghostfit_equipment');
       sessionStorage.removeItem('ghostfit_goal');
+      sessionStorage.removeItem('ghostfit_weight');
       router.replace('/');
     } catch (err) {
       console.error(err);
