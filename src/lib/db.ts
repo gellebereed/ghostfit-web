@@ -62,6 +62,22 @@ export async function getProfile(): Promise<UserProfile | null> {
     soulCoins: data.soul_coins ?? 0,
     unlockedCosmetics: data.unlocked_cosmetics ?? [],
     equippedCosmetics: data.equipped_cosmetics ?? {},
+    
+    // New metrics & streaks
+    weight_kg: data.weight_kg ?? 75,
+    current_streak: data.current_streak ?? 0,
+
+    // New Avatar fields
+    characterStyle: data.character_style,
+    auraColor: data.aura_color,
+    characterName: data.character_name,
+    ghostStyle: data.ghost_style,
+    ghostAuraColor: data.ghost_aura_color,
+    ghostName: data.ghost_name,
+    usesCustomAvatar: data.uses_custom_avatar,
+    customAvatarDataUrl: data.custom_avatar_data_url,
+    usesCustomGhost: data.uses_custom_ghost,
+    customGhostDataUrl: data.custom_ghost_data_url,
   };
   localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));
   memoryCache.profile = profile;
@@ -78,9 +94,55 @@ export async function saveProfile(profile: UserProfile): Promise<void> {
     goal: profile.goal,
     current_week: profile.currentWeek,
     onboarding_complete: profile.onboardingComplete,
+    weight_kg: profile.weight_kg,
+    current_streak: profile.current_streak,
+    character_style: profile.characterStyle,
+    aura_color: profile.auraColor,
+    character_name: profile.characterName,
+    ghost_style: profile.ghostStyle,
+    ghost_aura_color: profile.ghostAuraColor,
+    ghost_name: profile.ghostName,
+    uses_custom_avatar: profile.usesCustomAvatar,
+    custom_avatar_data_url: profile.customAvatarDataUrl,
+    uses_custom_ghost: profile.usesCustomGhost,
+    custom_ghost_data_url: profile.customGhostDataUrl,
   });
   localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));
   memoryCache.profile = profile;
+}
+
+export async function updateStreak(
+  userId: string,
+  result: 'win' | 'loss' | 'incomplete'
+): Promise<number> {
+  const profile = await getProfile();
+  if (!profile) return 0;
+  
+  const currentStreak = profile.current_streak ?? 0;
+  let newStreak: number;
+  
+  if (result === 'win') {
+    newStreak = currentStreak + 1;
+  } else if (result === 'loss') {
+    newStreak = 0; // RESET — ghost won, streak breaks
+  } else {
+    // incomplete — don't change streak
+    newStreak = currentStreak;
+  }
+  
+  await supabase
+    .from('profiles')
+    .update({ current_streak: newStreak })
+    .eq('id', userId);
+  
+  // Update local cache
+  if (memoryCache.profile) {
+    memoryCache.profile.current_streak = newStreak;
+    localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(memoryCache.profile));
+  }
+  memoryCache.streak = newStreak;
+  
+  return newStreak;
 }
 
 // ─── Workout Plans ────────────────────────────────────────────────────────────
@@ -384,8 +446,6 @@ export async function awardSoulCoins(
   let coins = 0;
   if (result === 'win') {
     coins = 10;
-    if (marginPercent >= 20) coins += 5;
-    if (marginPercent >= 50) coins += 10;
   } else if (result === 'loss') {
     coins = 2;
   } else {

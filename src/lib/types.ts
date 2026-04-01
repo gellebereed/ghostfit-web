@@ -44,6 +44,22 @@ export interface UserProfile {
   soulCoins: number;
   unlockedCosmetics: string[];
   equippedCosmetics: Record<string, string>;
+  
+  // New metrics & streaks
+  weight_kg: number;
+  current_streak: number;
+
+  // New Avatar fields
+  characterStyle?: string;
+  auraColor?: string;
+  characterName?: string;
+  ghostStyle?: string;
+  ghostAuraColor?: string;
+  ghostName?: string;
+  usesCustomAvatar?: boolean;
+  customAvatarDataUrl?: string;
+  usesCustomGhost?: boolean;
+  customGhostDataUrl?: string;
 }
 
 export interface ExerciseInfo {

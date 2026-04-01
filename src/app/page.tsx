@@ -7,6 +7,9 @@ import { WorkoutPlan, WorkoutDay, calculateTier } from '@/lib/types';
 import { getAvatarPrefs, getCharEmoji } from '@/lib/avatar';
 import { getGhostTaunt } from '@/lib/taunts';
 
+import { useAppStore } from '@/store/appStore';
+import { Avatar } from '@/components/Avatar';
+
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -34,6 +37,7 @@ const WORKOUT_FOCUS_IMAGES: Record<string, string> = {
 
 export default function HomePage() {
   const router = useRouter();
+  const { profile, refreshProfile } = useAppStore();
   const [ready, setReady] = useState(false);
   const [showLoader, setShowLoader] = useState(false);
   const [plan, setPlan] = useState<WorkoutPlan | null>(null);
@@ -54,11 +58,14 @@ export default function HomePage() {
 
     async function init() {
       try {
-        const profile = await getProfile();
-        if (!profile?.onboardingComplete) { router.replace('/onboarding'); return; }
+        await refreshProfile();
+        const p = await getCurrentPlan();
+        
+        // We need to check store after refresh
+        const currentProfile = useAppStore.getState().profile;
+        if (!currentProfile?.onboardingComplete) { router.replace('/onboarding'); return; }
 
-        const [p, result, wc, s, sessions] = await Promise.all([
-          getCurrentPlan(),
+        const [result, wc, s, sessions] = await Promise.all([
           getYesterdayResult(),
           getWinCount(),
           getStreak(),
@@ -115,7 +122,7 @@ export default function HomePage() {
       mounted = false; 
       clearTimeout(loaderTimer);
     };
-  }, [router]);
+  }, [router, refreshProfile]);
 
   if (!ready) {
     if (!showLoader) return null;
@@ -127,11 +134,8 @@ export default function HomePage() {
     );
   }
 
-  const avatar = getAvatarPrefs();
   const isRest = today?.isRest;
   const allDone = today && !isRest && today.exercises.every(ex => completed.has(ex.name));
-  const yourEmoji = getCharEmoji(avatar.yourCharacterStyle);
-  const ghostEmoji = getCharEmoji(avatar.ghostCharacterStyle);
 
   return (
     <>
@@ -155,14 +159,14 @@ export default function HomePage() {
         ) : battleResult === 'win' ? (
           <>
             <div className="battle-arena">
-              <div className={`battle-char tier-${tier}`}>
-                <div className="ghost-body you celebrating" style={{ boxShadow: `0 0 15px ${avatar.yourAuraColor}40` }}>{yourEmoji}</div>
-                <span className="ghost-label">{avatar.yourCharacterName}</span>
+              <div className="flex flex-col items-center gap-2">
+                <Avatar type="user" size={60} tier={tier} animationState="celebrating" />
+                <span className="text-[10px] font-bold text-white uppercase tracking-widest">{profile?.characterName ?? 'YOU'}</span>
               </div>
               <div className="battle-vs">VS</div>
-              <div className="battle-char">
-                <div className="ghost-body ghost defeated" style={{ background: `${avatar.ghostAuraColor}20` }}>{ghostEmoji}</div>
-                <span className="ghost-label" style={{ opacity: 0.6 }}>{avatar.ghostCharacterName}</span>
+              <div className="flex flex-col items-center gap-2">
+                <Avatar type="ghost" size={60} animationState="losing" />
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest opacity-60">{profile?.ghostName ?? 'GHOST'}</span>
               </div>
             </div>
             <div className="battle-result">
@@ -173,14 +177,14 @@ export default function HomePage() {
         ) : battleResult === 'loss' ? (
           <>
             <div className="battle-arena">
-              <div className={`battle-char tier-${tier}`}>
-                <div className="ghost-body you defeated" style={{ boxShadow: `0 0 15px ${avatar.yourAuraColor}40` }}>{yourEmoji}</div>
-                <span className="ghost-label">{avatar.yourCharacterName}</span>
+              <div className="flex flex-col items-center gap-2">
+                <Avatar type="user" size={60} tier={tier} animationState="losing" />
+                <span className="text-[10px] font-bold text-white uppercase tracking-widest">{profile?.characterName ?? 'YOU'}</span>
               </div>
               <div className="battle-vs">VS</div>
-              <div className="battle-char">
-                <div className="ghost-body ghost taunting" style={{ background: `${avatar.ghostAuraColor}20` }}>{ghostEmoji}</div>
-                <span className="ghost-label" style={{ opacity: 0.6 }}>{avatar.ghostCharacterName}</span>
+              <div className="flex flex-col items-center gap-2">
+                <Avatar type="ghost" size={60} animationState="celebrating" />
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest opacity-60">{profile?.ghostName ?? 'GHOST'}</span>
               </div>
             </div>
             <div className="battle-result">

@@ -1,20 +1,17 @@
 'use client';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getAvatarPrefs, saveAvatarPrefs, CHARACTER_STYLES, YOUR_AURA_COLORS, GHOST_AURA_COLORS, AvatarPrefs } from '@/lib/avatar';
-import { calculateTier } from '@/lib/types';
+import { calculateTier, UserProfile } from '@/lib/types';
 import { getWinCount } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
-import { useEffect } from 'react';
+import { Avatar } from '@/components/Avatar';
 
-// ---- Image compression + Supabase Storage upload ----
 async function uploadAvatarPhoto(file: File, type: 'user' | 'ghost'): Promise<string | null> {
-  // Get current user
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
-  // Compress image client-side to 256x256 JPEG blob
   const blob = await new Promise<Blob>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -37,7 +34,6 @@ async function uploadAvatarPhoto(file: File, type: 'user' | 'ghost'): Promise<st
     reader.readAsDataURL(file);
   });
 
-  // Upload to Supabase Storage
   const path = `${user.id}/${type}-avatar.jpg`;
   const { error: uploadError } = await supabase.storage
     .from('avatars')
@@ -47,7 +43,6 @@ async function uploadAvatarPhoto(file: File, type: 'user' | 'ghost'): Promise<st
     return null;
   }
 
-  // Get a long-lived signed URL (1 year)
   const { data: signedData } = await supabase.storage
     .from('avatars')
     .createSignedUrl(path, 60 * 60 * 24 * 365);
@@ -71,10 +66,7 @@ export default function AvatarPage() {
     setPrefs(prev => ({ ...prev, [key]: value }));
   }
 
-  async function handlePhotoUpload(
-    e: React.ChangeEvent<HTMLInputElement>,
-    type: 'user' | 'ghost'
-  ) {
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>, type: 'user' | 'ghost') {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
@@ -104,9 +96,21 @@ export default function AvatarPage() {
     setTimeout(() => router.push('/profile'), 800);
   }
 
-  // Which photo to show in the preview
-  const yourPreviewPhoto = prefs.yourUsesPhoto && prefs.yourPhotoUrl;
-  const ghostPreviewPhoto = prefs.ghostUsesPhoto && prefs.ghostPhotoUrl;
+  const userOverride: Partial<UserProfile> = {
+    characterName: prefs.yourCharacterName,
+    characterStyle: prefs.yourCharacterStyle,
+    auraColor: prefs.yourAuraColor,
+    customAvatarDataUrl: prefs.yourPhotoUrl || undefined,
+    usesCustomAvatar: prefs.yourUsesPhoto
+  };
+
+  const ghostOverride: Partial<UserProfile> = {
+    ghostName: prefs.ghostCharacterName,
+    ghostStyle: prefs.ghostCharacterStyle,
+    ghostAuraColor: prefs.ghostAuraColor,
+    customGhostDataUrl: prefs.ghostPhotoUrl || undefined,
+    usesCustomGhost: prefs.ghostUsesPhoto
+  };
 
   return (
     <div style={{ paddingBottom: 100 }}>
@@ -118,7 +122,6 @@ export default function AvatarPage() {
         <div style={{ width: 20 }} />
       </header>
 
-      {/* Tabs */}
       <div className="avatar-tabs">
         <button className={`avatar-tab ${tab === 'you' ? 'active' : ''}`} onClick={() => setTab('you')}>Your Character</button>
         <button className={`avatar-tab ${tab === 'ghost' ? 'active' : ''}`} onClick={() => setTab('ghost')}>Your Ghost</button>
@@ -126,36 +129,19 @@ export default function AvatarPage() {
 
       {tab === 'you' ? (
         <>
-          {/* ---- Photo Upload — YOUR CHARACTER ---- */}
           <div className="av-section">
             <div className="av-section-title">Your Photo</div>
             <div className="av-photo-row">
               <label className="av-photo-label" htmlFor="user-photo-input">
-                <div className={`av-photo-circle ${prefs.yourUsesPhoto ? 'av-photo-active' : 'av-photo-empty'}`}>
-                  {prefs.yourUsesPhoto && prefs.yourPhotoUrl
-                    ? <img src={prefs.yourPhotoUrl} alt="Your avatar" className="av-photo-img" />
-                    : <span className="av-photo-icon">📷</span>}
-                </div>
+                <Avatar type="user" size={80} profileOverride={userOverride} tier={tier} />
               </label>
-              <input
-                id="user-photo-input"
-                ref={userInputRef}
-                type="file"
-                accept="image/*"
-                className="av-photo-input"
-                onChange={e => handlePhotoUpload(e, 'user')}
-              />
+              <input id="user-photo-input" ref={userInputRef} type="file" accept="image/*" className="av-photo-input" onChange={e => handlePhotoUpload(e, 'user')} />
               <div className="av-photo-info">
-                <p className={`av-photo-title ${prefs.yourUsesPhoto ? 'green' : ''}`}>
-                  {prefs.yourUsesPhoto ? 'Photo set ✓' : 'Upload your photo'}
-                </p>
-                <p className="av-photo-sub">Your face in the battle arena</p>
-                {prefs.yourUsesPhoto && (
-                  <button className="av-photo-remove" onClick={() => removePhoto('user')}>Remove photo</button>
-                )}
+                <p className={`av-photo-title ${prefs.yourUsesPhoto ? 'green' : ''}`}>{prefs.yourUsesPhoto ? 'Photo set ✓' : 'Upload your photo'}</p>
+                <p className="av-photo-sub">Your face in the arena</p>
+                {prefs.yourUsesPhoto && <button className="av-photo-remove" onClick={() => removePhoto('user')}>Remove photo</button>}
               </div>
             </div>
-            {/* Divider */}
             <div className="av-divider">
               <div className="av-divider-line" />
               <span className="av-divider-text">or choose a character</span>
@@ -163,7 +149,6 @@ export default function AvatarPage() {
             </div>
           </div>
 
-          {/* Character Style */}
           <div className="av-section">
             <div className="av-section-title">Character Style</div>
             <div className="char-row">
@@ -177,7 +162,6 @@ export default function AvatarPage() {
             </div>
           </div>
 
-          {/* Aura Color */}
           <div className="av-section">
             <div className="av-section-title">Aura Color</div>
             <div className="color-row">
@@ -185,8 +169,7 @@ export default function AvatarPage() {
                 const locked = c.minTier && tier < c.minTier;
                 return (
                   <div key={c.color} className={`color-btn ${prefs.yourAuraColor === c.color ? 'selected' : ''}`}
-                    style={{ background: c.color }}
-                    onClick={() => !locked && update('yourAuraColor', c.color)}>
+                    style={{ background: c.color }} onClick={() => !locked && update('yourAuraColor', c.color)}>
                     {locked && <div className="lock">🔒</div>}
                   </div>
                 );
@@ -194,7 +177,6 @@ export default function AvatarPage() {
             </div>
           </div>
 
-          {/* Name */}
           <div className="av-section">
             <div className="av-section-title">Fighter Name</div>
             <input className="name-input" maxLength={10} value={prefs.yourCharacterName}
@@ -203,36 +185,19 @@ export default function AvatarPage() {
         </>
       ) : (
         <>
-          {/* ---- Photo Upload — YOUR GHOST ---- */}
           <div className="av-section">
             <div className="av-section-title">Rival Photo</div>
             <div className="av-photo-row">
               <label className="av-photo-label" htmlFor="ghost-photo-input">
-                <div className={`av-photo-circle ${prefs.ghostUsesPhoto ? 'av-photo-active av-photo-ghost' : 'av-photo-empty'}`}>
-                  {prefs.ghostUsesPhoto && prefs.ghostPhotoUrl
-                    ? <img src={prefs.ghostPhotoUrl} alt="Ghost avatar" className="av-photo-img av-photo-ghost-img" />
-                    : <span className="av-photo-icon">📷</span>}
-                </div>
+                <Avatar type="ghost" size={80} profileOverride={ghostOverride} />
               </label>
-              <input
-                id="ghost-photo-input"
-                ref={ghostInputRef}
-                type="file"
-                accept="image/*"
-                className="av-photo-input"
-                onChange={e => handlePhotoUpload(e, 'ghost')}
-              />
+              <input id="ghost-photo-input" ref={ghostInputRef} type="file" accept="image/*" className="av-photo-input" onChange={e => handlePhotoUpload(e, 'ghost')} />
               <div className="av-photo-info">
-                <p className={`av-photo-title ${prefs.ghostUsesPhoto ? 'green' : ''}`}>
-                  {prefs.ghostUsesPhoto ? 'Rival set ✓' : 'Upload someone to beat 😏'}
-                </p>
+                <p className={`av-photo-title ${prefs.ghostUsesPhoto ? 'green' : ''}`}>{prefs.ghostUsesPhoto ? 'Rival set ✓' : 'Upload someone to beat'}</p>
                 <p className="av-photo-sub">Their ghost haunts the arena</p>
-                {prefs.ghostUsesPhoto && (
-                  <button className="av-photo-remove" onClick={() => removePhoto('ghost')}>Remove photo</button>
-                )}
+                {prefs.ghostUsesPhoto && <button className="av-photo-remove" onClick={() => removePhoto('ghost')}>Remove photo</button>}
               </div>
             </div>
-            {/* Divider */}
             <div className="av-divider">
               <div className="av-divider-line" />
               <span className="av-divider-text">or choose a ghost</span>
@@ -240,7 +205,6 @@ export default function AvatarPage() {
             </div>
           </div>
 
-          {/* Ghost Character Style */}
           <div className="av-section">
             <div className="av-section-title">Ghost Style</div>
             <div className="char-row">
@@ -255,7 +219,6 @@ export default function AvatarPage() {
             </div>
           </div>
 
-          {/* Ghost Aura Color */}
           <div className="av-section">
             <div className="av-section-title">Ghost Aura</div>
             <div className="color-row">
@@ -266,45 +229,31 @@ export default function AvatarPage() {
             </div>
           </div>
 
-          {/* Ghost Name */}
           <div className="av-section">
             <div className="av-section-title">Ghost Name</div>
             <input className="name-input" maxLength={10} value={prefs.ghostCharacterName}
               onChange={e => update('ghostCharacterName', e.target.value.toUpperCase())} placeholder="GHOST" />
-            <div className="name-hint">Try &quot;MARCH ME&quot; or &quot;LAZY YOU&quot; 😏</div>
           </div>
         </>
       )}
 
-      {/* Preview */}
       <div className="av-section" style={{ textAlign: 'center' }}>
         <div className="av-section-title">Preview</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 20, padding: '12px 0' }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-            <div style={{ width: 50, height: 50, borderRadius: '50%', background: prefs.yourAuraColor, boxShadow: `0 0 15px ${prefs.yourAuraColor}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, overflow: 'hidden' }}>
-              {yourPreviewPhoto
-                ? <img src={prefs.yourPhotoUrl!} alt="You" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                : CHARACTER_STYLES.find(c => c.id === prefs.yourCharacterStyle)?.emoji}
-            </div>
+            <Avatar type="user" size={60} profileOverride={userOverride} tier={tier} />
             <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: 1, color: 'var(--text2)' }}>{prefs.yourCharacterName}</span>
           </div>
           <span style={{ fontSize: 16, fontWeight: 900, opacity: 0.5 }}>VS</span>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-            <div style={{ width: 50, height: 50, borderRadius: '50%', background: `${prefs.ghostAuraColor}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, opacity: 0.6, overflow: 'hidden' }}>
-              {ghostPreviewPhoto
-                ? <img src={prefs.ghostPhotoUrl!} alt="Ghost" style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'grayscale(20%)' }} />
-                : CHARACTER_STYLES.find(c => c.id === prefs.ghostCharacterStyle)?.emoji}
-            </div>
+            <Avatar type="ghost" size={60} profileOverride={ghostOverride} />
             <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: 1, color: 'var(--text2)', opacity: 0.6 }}>{prefs.ghostCharacterName}</span>
           </div>
         </div>
       </div>
 
-      {/* Save */}
       <div style={{ padding: '0 20px' }}>
-        <button className="btn-primary" onClick={save}>
-          {saved ? '✓ SAVED!' : 'SAVE FIGHTER'}
-        </button>
+        <button className="btn-primary" onClick={save}>{saved ? '✓ SAVED!' : 'SAVE FIGHTER'}</button>
       </div>
     </div>
   );

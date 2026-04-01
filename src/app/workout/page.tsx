@@ -1,10 +1,11 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getCurrentPlan, getAllSessions, getWinCount, getStreak } from '@/lib/db';
-import { WorkoutDay } from '@/lib/types';
-import { getAvatarPrefs, getCharEmoji } from '@/lib/avatar';
+import { getCurrentPlan, getAllSessions, updateStreak, awardSoulCoins } from '@/lib/db';
+import { WorkoutDay, GhostSession } from '@/lib/types';
+import { useAppStore } from '@/store/appStore';
+import PostWorkoutRecap from '@/components/PostWorkoutRecap';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -32,15 +33,25 @@ const WORKOUT_FOCUS_IMAGES: Record<string, string> = {
 
 export default function WorkoutPage() {
   const router = useRouter();
+  const { profile, refreshProfile } = useAppStore();
   const [today, setToday] = useState<WorkoutDay | null>(null);
   const [completed, setCompleted] = useState<Set<string>>(new Set());
+  const [exerciseSessions, setExerciseSessions] = useState<GhostSession[]>([]);
   const [ready, setReady] = useState(false);
   const [showRecap, setShowRecap] = useState(false);
-  const [recapData, setRecapData] = useState<{ totalReps: number; totalSets: number; exWon: number; streak: number; wins: number; focus: string } | null>(null);
-  const [sharing, setSharing] = useState(false);
-  const recapCardRef = useRef<HTMLDivElement>(null);
+  const [recapData, setRecapData] = useState<{ 
+    workoutResult: 'win' | 'loss';
+    totalReps: number; 
+    totalSets: number; 
+    exWon: number; 
+    streak: number; 
+    totalEx: number;
+    duration: number;
+  } | null>(null);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { 
+    refreshProfile().then(load); 
+  }, [refreshProfile]);
 
   async function load() {
     try {
@@ -53,17 +64,14 @@ export default function WorkoutPage() {
       const sessions = await getAllSessions();
       const todayStr = new Date().toDateString();
       const todaySessions = sessions.filter(s => new Date(s.date).toDateString() === todayStr);
+      setExerciseSessions(todaySessions);
+      
       const completedNames = new Set(todaySessions.map(s => s.exerciseName));
       setCompleted(completedNames);
 
+      // If already complete today, show recap immediately
       if (td && !td.isRest && td.exercises.every(ex => completedNames.has(ex.name))) {
-        const wins = await getWinCount();
-        const streak = await getStreak();
-        const totalReps = todaySessions.reduce((a, s) => a + s.totalReps, 0);
-        const totalSets = todaySessions.reduce((a, s) => a + s.setsCompleted, 0);
-        const exWon = todaySessions.filter(s => s.result === 'win').length;
-        setRecapData({ totalReps, totalSets, exWon, streak, wins, focus: td.focus });
-        setShowRecap(true);
+        triggerRecap(todaySessions, td);
       }
     } catch (err) {
       console.error('Workout load error:', err);
@@ -72,33 +80,31 @@ export default function WorkoutPage() {
     }
   }
 
-  async function shareRecap() {
-    if (!recapCardRef.current) return;
-    setSharing(true);
-    try {
-      const html2canvas = (await import('html2canvas')).default;
-      const canvas = await html2canvas(recapCardRef.current, {
-        backgroundColor: '#141414', scale: 2, useCORS: true, logging: false,
-      });
-      canvas.toBlob(async (blob) => {
-        if (!blob) return;
-        const file = new File([blob], 'ghostfit-battle.png', { type: 'image/png' });
-        if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: 'GhostFit Battle Result' });
-        } else {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url; a.download = 'ghostfit-battle.png'; a.click();
-          URL.revokeObjectURL(url);
-        }
-      }, 'image/png');
-    } catch {}
-    setSharing(false);
-  }
+  async function triggerRecap(sessions: GhostSession[], td: WorkoutDay) {
+    if (!profile) return;
+    
+    const exWon = sessions.filter(s => s.result === 'win').length;
+    const totalEx = td.exercises.length;
+    const workoutResult = exWon > totalEx / 2 ? 'win' : 'loss';
+    
+    const streak = await updateStreak(profile.characterName || 'YOU', workoutResult);
+    await awardSoulCoins(workoutResult, 0);
+    
+    const totalReps = sessions.reduce((a, s) => a + s.totalReps, 0);
+    const totalSets = sessions.reduce((a, s) => a + s.setsCompleted, 0);
+    const duration = sessions.reduce((a, s) => a + (s.totalDuration || 0), 0) + (totalSets * 90);
 
-  const avatar = getAvatarPrefs();
-  const yourEmoji = getCharEmoji(avatar.yourCharacterStyle);
-  const ghostEmoji = getCharEmoji(avatar.ghostCharacterStyle);
+    setRecapData({ 
+      workoutResult,
+      totalReps, 
+      totalSets, 
+      exWon, 
+      streak,
+      totalEx,
+      duration
+    });
+    setShowRecap(true);
+  }
 
   if (!ready) return <div className="loading"><div className="loader" /></div>;
   if (!today || today.isRest) return (
@@ -115,60 +121,37 @@ export default function WorkoutPage() {
 
   return (
     <div>
-      {/* Post-Workout Recap Overlay */}
       {showRecap && recapData && (
-        <div className="recap-overlay">
-          <div className="recap-title">BATTLE COMPLETE</div>
-          <div className="recap-subtitle">{new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} · {recapData.focus}</div>
-
-          <div className="recap-card" ref={recapCardRef}>
-            <div className="recap-logo">GHOSTFIT 👻</div>
-            <div className="recap-battle">
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                <div style={{ width: 50, height: 50, borderRadius: '50%', background: avatar.yourAuraColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: `0 0 15px ${avatar.yourAuraColor}40` }}>{yourEmoji}</div>
-                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text2)' }}>{avatar.yourCharacterName}</span>
-              </div>
-              <span style={{ fontSize: 16, fontWeight: 900, opacity: 0.5 }}>VS</span>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                <div style={{ width: 50, height: 50, borderRadius: '50%', background: `${avatar.ghostAuraColor}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, opacity: 0.6 }}>{ghostEmoji}</div>
-                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text2)', opacity: 0.6 }}>{avatar.ghostCharacterName}</span>
-              </div>
-            </div>
-            <div className="recap-result">
-              {recapData.exWon > today.exercises.length / 2 ? 'YOU WIN 🔥' : '💀 GHOST WINS'}
-            </div>
-            <div className="recap-stats">
-              <div className="recap-stat"><div className="rs-val">{recapData.totalReps}</div><div className="rs-lbl">Total Reps</div></div>
-              <div className="recap-stat"><div className="rs-val">{recapData.totalSets}</div><div className="rs-lbl">Sets Done</div></div>
-              <div className="recap-stat"><div className="rs-val">{recapData.exWon}</div><div className="rs-lbl">Exercises Won</div></div>
-              <div className="recap-stat"><div className="rs-val">{recapData.streak} 🔥</div><div className="rs-lbl">Win Streak</div></div>
-            </div>
-            <div className="recap-watermark">ghostfit.app</div>
-          </div>
-
-          <div className="recap-buttons">
-            <button className="btn-outline" onClick={shareRecap} disabled={sharing} style={{ flex: 1 }}>
-              {sharing ? '...' : '📤 Share'}
-            </button>
-            <button className="btn-primary" onClick={() => { setShowRecap(false); router.push('/'); }} style={{ flex: 1 }}>Continue →</button>
-          </div>
-        </div>
+        <PostWorkoutRecap 
+          workoutResult={recapData.workoutResult}
+          exerciseSessions={exerciseSessions.map(s => ({
+            exerciseName: s.exerciseName,
+            metricType: s.totalDuration > 0 ? 'duration' : 'weight_reps',
+            totalReps: s.totalReps,
+            avgWeight: s.avgWeight,
+            setsCompleted: s.setsCompleted,
+            totalDuration: s.totalDuration
+          }))}
+          newStreak={recapData.streak}
+          totalReps={recapData.totalReps}
+          setsCompleted={recapData.totalSets}
+          exercisesWon={recapData.exWon}
+          totalExercises={recapData.totalEx}
+          durationSeconds={recapData.duration}
+          onContinue={() => {
+            setShowRecap(false);
+            router.push('/');
+          }}
+        />
       )}
 
-      {/* ===== NIKE-INSPIRED HERO SECTION ===== */}
       <div className="wk-hero">
         <img src={heroImg} alt={today.focus} className="wk-hero-img" />
         <div className="wk-hero-gradient" />
-
-        {/* Back button */}
         <button className="wk-hero-back" onClick={() => router.push('/')}>←</button>
-
-        {/* Progress pill */}
         <div className={`wk-hero-pill ${allDone ? 'done' : ''}`}>
           {done}/{total} DONE
         </div>
-
-        {/* Bottom info */}
         <div className="wk-hero-info">
           <div className="wk-hero-tags">
             <span className="wk-tag-focus">{today.focus}</span>
@@ -184,12 +167,10 @@ export default function WorkoutPage() {
         </div>
       </div>
 
-      {/* Progress bar */}
       <div className="wk-progress-track">
         <div className="wk-progress-fill" style={{ width: `${(done / total) * 100}%` }} />
       </div>
 
-      {/* ===== EXERCISE CARDS ===== */}
       <div className="wk-cards">
         {today.exercises.map((ex, i) => {
           const isDone = completed.has(ex.name);
@@ -214,16 +195,12 @@ export default function WorkoutPage() {
                 <div className="wk-card-inner">
                   <div className="wk-card-pulse-wrap">
                     <div className="wk-card-pulse-ring" />
-                    <div className="wk-card-pulse-center">
-                      <div className="wk-card-pulse-dot" />
-                    </div>
+                    <div className="wk-card-pulse-center"><div className="wk-card-pulse-dot" /></div>
                   </div>
                   <div className="wk-card-body">
                     <p className="wk-card-name active">{ex.name}</p>
                     <div className="wk-card-detail">
-                      <span className="wk-card-sets">
-                        {formatExerciseDetail(ex)}
-                      </span>
+                      <span className="wk-card-sets">{formatExerciseDetail(ex)}</span>
                       <span className="wk-card-dot">·</span>
                       <span className="wk-card-time">~{(ex.sets ?? 3) * 2} min</span>
                     </div>
@@ -236,15 +213,12 @@ export default function WorkoutPage() {
             );
           }
 
-          // Upcoming
           return (
             <div key={i} className="wk-card wk-card-upcoming">
               <div className="wk-card-num">{i + 1}</div>
               <div className="wk-card-body">
                 <p className="wk-card-name upcoming">{ex.name}</p>
-                <p className="wk-card-sub">
-                  {formatExerciseDetail(ex)}
-                </p>
+                <p className="wk-card-sub">{formatExerciseDetail(ex)}</p>
               </div>
               <span className="wk-card-equip">{ex.equipment}</span>
             </div>
@@ -252,10 +226,9 @@ export default function WorkoutPage() {
         })}
       </div>
 
-      {/* Complete workout button */}
       {allDone && !showRecap && (
         <div className="wk-complete-bar">
-          <button className="wk-complete-btn" onClick={() => setShowRecap(true)}>
+          <button className="wk-complete-btn" onClick={() => triggerRecap(exerciseSessions, today)}>
             Complete Workout 🎉
           </button>
         </div>

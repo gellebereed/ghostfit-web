@@ -2,25 +2,27 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getWinCount, getStreak, getAllSessions, getProfile } from '@/lib/db';
+import { getWinCount, getStreak, getAllSessions, saveProfile } from '@/lib/db';
 import { calculateTier, getTierLabel, TIER_THRESHOLDS } from '@/lib/types';
-import { getAvatarPrefs, CHARACTER_STYLES } from '@/lib/avatar';
+import { useAppStore } from '@/store/appStore';
+import { Avatar } from '@/components/Avatar';
 import { EQUIPMENT_ICONS } from '@/lib/equipment-icons';
 import { supabase } from '@/lib/supabase';
 
 export default function ProfilePage() {
   const router = useRouter();
+  const { profile, refreshProfile } = useAppStore();
   const [wins, setWins] = useState(0);
   const [losses, setLosses] = useState(0);
   const [streak, setStreakVal] = useState(0);
   const [totalTime, setTotalTime] = useState(0);
   const [tier, setTier] = useState(1);
-  const [goal, setGoal] = useState('');
-  const [equipment, setEquipment] = useState<string[]>([]);
   const [signingOut, setSigningOut] = useState(false);
-  const [soulCoins, setSoulCoins] = useState(0);
+  const [savingWeight, setSavingWeight] = useState(false);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { 
+    refreshProfile().then(load); 
+  }, [refreshProfile]);
 
   async function load() {
     const sessions = await getAllSessions();
@@ -30,18 +32,27 @@ export default function ProfilePage() {
     const s = await getStreak(); setStreakVal(s);
     const totalSec = sessions.reduce((acc, s) => acc + (s.totalDuration || s.setsCompleted * 120), 0);
     setTotalTime(Math.round(totalSec / 3600 * 10) / 10);
-    const profile = await getProfile();
-    if (profile) { setGoal(profile.goal); setEquipment(profile.equipment); setSoulCoins(profile.soulCoins || 0); }
+  }
+
+  async function updateWeight(newWeight: number) {
+    if (!profile || isNaN(newWeight)) return;
+    setSavingWeight(true);
+    try {
+      await saveProfile({ ...profile, weight_kg: newWeight });
+      await refreshProfile();
+    } catch (err) {
+      console.error('Update weight error:', err);
+    } finally {
+      setSavingWeight(false);
+    }
   }
 
   async function handleSignOut() {
     setSigningOut(true);
     try {
       await supabase.auth.signOut();
-      // Clear all local caches
       localStorage.clear();
       sessionStorage.clear();
-      // Force redirect to login
       window.location.href = '/login';
     } catch (err) {
       console.error('Sign out error:', err);
@@ -49,8 +60,8 @@ export default function ProfilePage() {
     }
   }
 
-  const avatar = getAvatarPrefs();
-  const hasPhoto = avatar.yourUsesPhoto && avatar.yourPhotoUrl;
+  if (!profile) return <div className="loading"><div className="loader" /></div>;
+
   const nextTierThreshold = TIER_THRESHOLDS[tier] || 25;
   const prevTierThreshold = TIER_THRESHOLDS[tier - 1] || 0;
   const progress = tier >= 5 ? 100 : Math.min(100, ((wins - prevTierThreshold) / (nextTierThreshold - prevTierThreshold)) * 100);
@@ -68,14 +79,12 @@ export default function ProfilePage() {
       </header>
 
       <div className="profile-header">
-        <div className={`profile-char t${tier}`} style={{ background: avatar.yourAuraColor, boxShadow: `0 0 30px ${avatar.yourAuraColor}40`, overflow: 'hidden' }}>
-          {hasPhoto
-            ? <img src={avatar.yourPhotoUrl!} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            : (CHARACTER_STYLES.find(c => c.id === avatar.yourCharacterStyle)?.emoji || '💪')}
+        <div style={{ position: 'relative', width: 100, height: 100, margin: '0 auto 16px' }}>
+          <Avatar type="user" size={100} tier={tier} />
         </div>
         <div className="profile-tier">Tier {tier} {getTierLabel(tier)}</div>
         <div className="profile-tier-bar">
-          <div className="profile-tier-fill" style={{ width: `${progress}%`, background: avatar.yourAuraColor }} />
+          <div className="profile-tier-fill" style={{ width: `${progress}%`, background: profile.auraColor || 'var(--accent)' }} />
         </div>
         <p style={{ fontSize: 12, color: 'var(--text2)' }}>
           {tier < 5 ? `${nextTierThreshold - wins} more wins to Tier ${tier + 1}` : 'Max tier reached! 👑'}
@@ -89,12 +98,30 @@ export default function ProfilePage() {
               <span style={{ fontSize: 20 }}>🛒</span>
               <div>
                 <div style={{ fontWeight: 800, color: 'var(--text)' }}>Soul Shop</div>
-                <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>⚡ {soulCoins} Soul Coins</div>
+                <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>⚡ {profile.soulCoins || 0} Soul Coins</div>
               </div>
             </div>
             <div style={{ color: 'var(--accent)', fontWeight: 800 }}>→</div>
           </div>
         </Link>
+      </div>
+
+      <div style={{ padding: '20px 20px 0' }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>Biometrics</div>
+        <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontWeight: 600 }}>Body Weight</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input 
+              type="number" 
+              value={profile.weight_kg || ''} 
+              onChange={(e) => updateWeight(parseFloat(e.target.value))}
+              placeholder="75"
+              style={{ width: 60, textAlign: 'right', background: 'transparent', border: 'none', borderBottom: '1px solid var(--border)', color: 'var(--text)', outline: 'none' }}
+            />
+            <span style={{ fontSize: 12, color: 'var(--text2)' }}>kg</span>
+            {savingWeight && <div className="loader small" />}
+          </div>
+        </div>
       </div>
 
       <div style={{ padding: '0 20px', marginBottom: 16 }}>
@@ -113,21 +140,21 @@ export default function ProfilePage() {
         <div className="stat-box"><div className="emoji">⏱</div><div className="val">{totalTime}</div><div className="lbl">Hours Trained</div></div>
       </div>
 
-      {goal && (
+      {profile.goal && (
         <div style={{ padding: '16px 20px' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>Current Goal</div>
           <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 24 }}>{goal === 'shredded' ? '🔥' : goal === 'muscle' ? '💪' : goal === 'strength' ? '⚡' : '🏃'}</span>
-            <span style={{ fontWeight: 700, textTransform: 'capitalize' }}>{goal.replace('shredded', 'Get Shredded').replace('muscle', 'Build Muscle').replace('strength', 'Get Stronger').replace('fitness', 'Improve Fitness')}</span>
+            <span style={{ fontSize: 24 }}>{profile.goal === 'shredded' ? '🔥' : profile.goal === 'muscle' ? '💪' : profile.goal === 'strength' ? '⚡' : '🏃'}</span>
+            <span style={{ fontWeight: 700, textTransform: 'capitalize' }}>{profile.goal.replace('shredded', 'Get Shredded').replace('muscle', 'Build Muscle').replace('strength', 'Get Stronger').replace('fitness', 'Improve Fitness')}</span>
           </div>
         </div>
       )}
 
-      {equipment.length > 0 && (
+      {profile.equipment && profile.equipment.length > 0 && (
         <div style={{ padding: '0 20px' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>Equipment</div>
           <div className="equip-card-grid">
-            {equipment.map(e => (
+            {profile.equipment.map(e => (
               <div key={e} className="equip-card selected">
                 <svg className="eqicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d={EQUIPMENT_ICONS[e] || EQUIPMENT_ICONS['Bodyweight Only']} />
@@ -139,7 +166,6 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* Sign Out */}
       <div style={{ padding: '16px 20px 28px' }}>
         <button onClick={handleSignOut} className="auth-signout-btn" disabled={signingOut}>
           {signingOut ? 'Signing out...' : 'Sign Out'}

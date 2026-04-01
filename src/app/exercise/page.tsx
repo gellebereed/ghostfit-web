@@ -3,7 +3,8 @@ import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getCurrentPlan, getGhostForExercise, saveGhostSession, getWinCount, getAllSessions, getCachedExercise, cacheExercise, getStreak, getAllTimeBest, updateCachedVideoId, getProfile, awardSoulCoins } from '@/lib/db';
 import { Exercise, GhostSession, ExerciseInfo, calculateTier } from '@/lib/types';
-import { getAvatarPrefs, getCharEmoji } from '@/lib/avatar';
+import { useAppStore } from '@/store/appStore';
+import { Avatar } from '@/components/Avatar';
 import { checkMilestones, MilestoneEvent } from '@/lib/milestones';
 import { playSetComplete, playGhostBeaten, playGiveUp, playMilestone, hapticSetComplete, hapticGhostBeaten, hapticGiveUp, hapticMilestone } from '@/lib/sound';
 import { arcadeSounds, initAudio } from '@/utils/arcadeSounds';
@@ -70,6 +71,7 @@ function YouTubeEmbed({ videoId }: { videoId: string }) {
 
 function ExerciseContent() {
   const router = useRouter();
+  const { profile, refreshProfile } = useAppStore();
   const params = useSearchParams();
   const idx = parseInt(params.get('idx') || '0');
 
@@ -124,9 +126,9 @@ function ExerciseContent() {
   useEffect(() => {
     document.addEventListener('pointerdown', initAudio, { once: true });
     setSoundEnabled(localStorage.getItem('ghostfit_sound_enabled') !== 'false');
-    load();
+    refreshProfile().then(load);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, []);
+  }, [refreshProfile]);
 
   async function load() {
     try {
@@ -367,9 +369,6 @@ function ExerciseContent() {
   const ahead = ghost && myScore > ghostTarget;
   const tied = ghost && myScore === ghostTarget;
 
-  const avatar = getAvatarPrefs();
-  const yourEmoji = getCharEmoji(avatar.yourCharacterStyle);
-  const ghostEmoji = getCharEmoji(avatar.ghostCharacterStyle);
   const instrToShow = showAllInstr ? instructions : instructions.slice(0, 2);
 
   // RPG Cosmetics Setup
@@ -456,7 +455,7 @@ function ExerciseContent() {
           <div className="hb-row">
             <div className="hb-col">
               <div className="hb-labels">
-                <span className="hb-name green">{avatar.yourCharacterName}</span>
+                <span className="hb-name green">{profile?.characterName ?? 'YOU'}</span>
                 <span className="hb-pct green">
                   {ghost ? `${Math.round(Math.min((myScore / Math.max(ghostTarget, 1)) * 100, 100))}%` : '—'}
                 </span>
@@ -472,7 +471,7 @@ function ExerciseContent() {
             <div className="hb-col">
               <div className="hb-labels">
                 <span className="hb-ghost-info">{ghost ? (isCardio ? formatTime(ghostTarget) : `${ghostTarget} target`) : 'NO DATA'}</span>
-                <span className="hb-name ghost-name">{(ghost as any)?.isInitiation ? 'DAY 1 TARGET' : avatar.ghostCharacterName}</span>
+                <span className="hb-name ghost-name">{(ghost as any)?.isInitiation ? 'DAY 1 TARGET' : (profile?.ghostName ?? 'GHOST')}</span>
               </div>
               <div className="hb-track">
                 <div className="hb-fill ghost-fill" style={{ width: ghost ? '100%' : '0%' }} />
@@ -493,30 +492,12 @@ function ExerciseContent() {
                 borderColor: auraColor,
                 boxShadow: (ahead || justScored)
                   ? `0 0 20px ${auraColor}, inset 0 0 15px ${auraColor}` : 'none',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}>
-                <div className="fc-avatar">
-                  {avatar.yourUsesPhoto && avatar.yourPhotoUrl ? (
-                    <img src={avatar.yourPhotoUrl} alt="You" className="fc-photo" />
-                  ) : (
-                    <svg viewBox="0 0 60 70" width="60" height="70" xmlns="http://www.w3.org/2000/svg">
-                      <circle cx="30" cy="16" r="10" fill={tier >= 4 ? '#FFD700' : '#00FF87'} opacity="0.9"/>
-                      <circle cx="27" cy="15" r="2" fill="#0A0A0A"/>
-                      <circle cx="33" cy="15" r="2" fill="#0A0A0A"/>
-                      <path d={ahead || justScored ? 'M 26 19 Q 30 22 34 19' : 'M 26 19 Q 30 20 34 19'} stroke="#0A0A0A" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-                      <rect x="20" y="28" width="20" height="20" rx="4" fill={tier >= 4 ? '#FFD700' : '#00FF87'} opacity="0.8"/>
-                      <rect x="8" y="28" width="10" height="6" rx="3" fill={tier >= 4 ? '#FFD700' : '#00FF87'} opacity="0.8"
-                        transform={ahead || justScored ? 'rotate(-30, 13, 31)' : 'rotate(0)'}/>
-                      <rect x="42" y="28" width="10" height="6" rx="3" fill={tier >= 4 ? '#FFD700' : '#00FF87'} opacity="0.8"/>
-                      <rect x="21" y="46" width="7" height="14" rx="3" fill={tier >= 4 ? '#FFD700' : '#00FF87'} opacity="0.7"/>
-                      <rect x="32" y="46" width="7" height="14" rx="3" fill={tier >= 4 ? '#FFD700' : '#00FF87'} opacity="0.7"/>
-                      {tier >= 5 && <text x="30" y="8" textAnchor="middle" fontSize="8">👑</text>}
-                    </svg>
-                  )}
-                </div>
+                <Avatar type="user" size={80} tier={tier} animationState={ahead || justScored ? 'celebrating' : 'idle'} />
                 {justScored && <div className="fc-flash" />}
-                <div className="fc-tier-badge" style={{ background: tier >= 4 ? '#FFD700' : '#00FF87' }}>{tier}</div>
               </div>
-              <div className="fc-label green">{avatar.yourCharacterName}</div>
+              <div className="fc-label green">{profile?.characterName ?? 'YOU'}</div>
             </div>
 
             {/* CENTER STATUS */}
@@ -553,35 +534,12 @@ function ExerciseContent() {
                 borderColor: 'rgba(255,255,255,0.15)',
                 opacity: ahead ? 0.4 : 0.7,
                 boxShadow: !ahead && ghost ? '0 0 15px rgba(255,255,255,0.05)' : 'none',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}>
-                <div className="fc-avatar">
-                  {avatar.ghostUsesPhoto && avatar.ghostPhotoUrl ? (
-                    <img src={avatar.ghostPhotoUrl} alt="Ghost" className="fc-photo ghost-photo" />
-                  ) : (
-                    <svg viewBox="0 0 60 70" width="60" height="70" xmlns="http://www.w3.org/2000/svg">
-                      {(ghost as any)?.isInitiation ? (
-                        <text x="30" y="45" textAnchor="middle" fontSize="30" fill="rgba(255,255,255,0.4)">🎯</text>
-                      ) : (
-                        <g>
-                          <path d="M 15 35 Q 15 15 30 10 Q 45 15 45 35 L 45 60 Q 40 55 35 60 Q 30 55 25 60 Q 20 55 15 60 Z"
-                            fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
-                          <circle cx="25" cy="28" r="4" fill="rgba(255,255,255,0.6)"/>
-                          <circle cx="35" cy="28" r="4" fill="rgba(255,255,255,0.6)"/>
-                          <circle cx="26" cy="29" r="2" fill="#0A0A0A"/>
-                          <circle cx="36" cy="29" r="2" fill="#0A0A0A"/>
-                          {!ahead ? (
-                            <path d="M 24 36 Q 30 40 36 36" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-                          ) : (
-                            <path d="M 24 38 Q 30 34 36 38" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-                          )}
-                        </g>
-                      )}
-                    </svg>
-                  )}
-                </div>
+                <Avatar type="ghost" size={80} animationState={ahead ? 'losing' : 'idle'} />
                 {ahead && !(ghost as any)?.isInitiation && <div className="fc-defeated">💀</div>}
               </div>
-              <div className="fc-label ghost-label">{avatar.ghostCharacterName}</div>
+              <div className="fc-label ghost-label">{profile?.ghostName ?? 'GHOST'}</div>
             </div>
           </div>
 
