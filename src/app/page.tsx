@@ -9,6 +9,7 @@ import { getGhostTaunt } from '@/lib/taunts';
 
 import { useAppStore } from '@/store/appStore';
 import { Avatar } from '@/components/Avatar';
+import WelcomeOverlay from '@/components/WelcomeOverlay';
 
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -149,6 +150,13 @@ export default function HomePage() {
 
   return (
     <>
+      <WelcomeOverlay
+        profile={profile}
+        streak={streak}
+        tier={tier}
+        soulCoins={profile?.soulCoins ?? 0}
+        battleResult={battleResult}
+      />
       <header className="hdr">
         <span className="hdr-logo">👻 GHOSTFIT</span>
         {streak > 0 && <span style={{ color: 'var(--accent)', fontSize: 13, fontWeight: 700 }}>{streak} day streak 🔥</span>}

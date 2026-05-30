@@ -268,11 +268,11 @@ button, input {
 
 /* ---- EXERCISE / BATTLE SCREEN ---- */
 /* ---- FIGHTER ARENA — GAMIFIED ---- */
-.fighter-arena{margin:0 16px;background:linear-gradient(180deg,#0D1117,#111820);border:1px solid rgba(255,255,255,0.06);border-radius:16px;min-height:200px;position:relative;overflow:hidden;padding-bottom:12px;}
+.fighter-arena{margin:0;background:linear-gradient(180deg,#0D1117,#111820);border-bottom:1px solid rgba(255,255,255,0.06);min-height:160px;position:relative;overflow:hidden;padding-bottom:8px;}
 .fighter-arena.shake{animation:shake 0.3s ease;}
 @keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-3px);}75%{transform:translateX(3px);}}
-.arena-flash{position:absolute;inset:0;background:var(--accent);opacity:0;z-index:10;pointer-events:none;animation:flash 0.5s ease;}
-@keyframes flash{0%{opacity:0.4;}100%{opacity:0;}}
+.arena-flash{position:absolute;inset:0;background:var(--accent);opacity:0;z-index:10;pointer-events:none;animation:flash1 0.5s ease;}
+@keyframes flash1{0%{opacity:0.4;}100%{opacity:0;}}
 
 /* Health Bars */
 .hb-row{display:flex;gap:8px;padding:12px 12px 0;}
@@ -290,7 +290,7 @@ button, input {
 .hb-fill.ghost-fill{background:linear-gradient(270deg,#666,#555);}
 
 /* Fighters Row */
-.fighters-row{display:flex;align-items:flex-end;justify-content:space-between;padding:16px 24px 4px;}
+.fighters-row{display:flex;align-items:flex-end;justify-content:space-between;padding:12px 20px 4px;}
 
 /* Fighter Card Wrapper */
 .fighter-card-wrap{display:flex;flex-direction:column;align-items:center;transition:transform 0.2s;}
@@ -302,7 +302,7 @@ button, input {
 .fc-score.gray{color:#666;}
 
 /* Fighter Card */
-.fc-card{position:relative;width:80px;height:90px;border-radius:16px;border:2px solid;overflow:hidden;transition:box-shadow 0.3s,opacity 0.3s;}
+.fc-card{position:relative;width:72px;height:84px;border-radius:12px;border:2px solid;overflow:hidden;transition:box-shadow 0.3s,opacity 0.3s;}
 .fc-avatar{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:16px;overflow:hidden;}
 .fc-photo{width:100%;height:100%;object-fit:cover;}
 .fc-photo.ghost-photo{opacity:0.6;filter:grayscale(30%);}
@@ -634,6 +634,50 @@ button, input {
   }
 }
 
+/* New over-arching page structure */
+.battle-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--bg);
+}
+
+.sl-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 20px 32px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
+}
+
+.sl-footer-btn {
+  background: #1A1A1A;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #666;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.sl-footer-btn:hover {
+  color: var(--loss-red);
+  border-color: rgba(255, 68, 68, 0.2);
+}
+
+.sl-footer-sys {
+  font-size: 8px;
+  color: #444;
+  font-family: inherit;
+  letter-spacing: 2px;
+}
+
 /* Native app active tap feedback */
 .btn-primary:active, .btn-secondary:active, .auth-google-btn:active, .nav-item:active, .auth-tab:active, .auth-signout-btn:active {
   transform: scale(0.95) !important;
@@ -805,3 +849,201 @@ button, input {
 .transition-colors { transition-property: background-color, border-color, color, fill, stroke; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
 .tracking-widest { letter-spacing: 0.1em; }
 .uppercase { text-transform: uppercase; }
+
+/* Missing Layout Utilities */
+.w-full { width: 100%; }
+.h-full { height: 100%; }
+.absolute { position: absolute; }
+.relative { position: relative; }
+.inset-0 { top: 0; right: 0; bottom: 0; left: 0; }
+.hidden { display: none; }
+.block { display: block; }
+.overflow-hidden { overflow: hidden; }
+.z-10 { z-index: 10; }
+.inset-y-0 { top: 0; bottom: 0; }
+.left-0 { left: 0; }
+.right-0 { right: 0; }
+.top-0 { top: 0; }
+.bottom-0 { bottom: 0; }
+
+/* ---- Welcome Overlay ---- */
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 10, 0.85);
+  backdrop-filter: blur(20px);
+  padding: 20px;
+  animation: welcomeFadeIn 0.5s ease both;
+}
+
+.welcome-overlay.fade-out {
+  animation: welcomeFadeOut 0.4s ease both;
+}
+
+.welcome-card {
+  width: 100%;
+  max-width: 380px;
+  background: linear-gradient(145deg, rgba(20, 20, 20, 0.95), rgba(28, 28, 28, 0.95));
+  border: 1.5px solid rgba(0, 255, 135, 0.35);
+  box-shadow: 0 20px 50px rgba(0, 255, 135, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border-radius: 24px;
+  padding: 32px 24px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.welcome-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(0, 255, 135, 0.05) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.welcome-ghost-container {
+  position: relative;
+  width: 110px;
+  height: 110px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.welcome-ghost-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(0, 255, 135, 0.3) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: welcomeGlow 2.5s ease-in-out infinite alternate;
+}
+
+.welcome-ghost-emoji {
+  font-size: 56px;
+  animation: welcomeFloat 3s ease-in-out infinite;
+  z-index: 2;
+  filter: drop-shadow(0 0 15px rgba(0, 255, 135, 0.5));
+}
+
+.welcome-title {
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #fff;
+  margin-bottom: 4px;
+}
+
+.welcome-subtitle {
+  font-size: 14px;
+  color: var(--accent);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 24px;
+}
+
+.welcome-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 24px;
+}
+
+.welcome-stat-box {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
+  padding: 12px 6px;
+  text-align: center;
+  transition: border-color 0.3s;
+}
+
+.welcome-stat-box:hover {
+  border-color: rgba(0, 255, 135, 0.25);
+}
+
+.welcome-stat-val {
+  font-size: 18px;
+  font-weight: 900;
+  color: #fff;
+}
+
+.welcome-stat-lbl {
+  font-size: 9px;
+  color: var(--text2);
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+}
+
+.welcome-motivate {
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.6;
+  margin-bottom: 28px;
+  padding: 0 8px;
+}
+
+.welcome-btn {
+  width: 100%;
+  padding: 18px;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 255, 135, 0.25);
+  transition: transform 0.2s, background-color 0.2s, box-shadow 0.2s;
+  z-index: 10;
+  font-family: inherit;
+}
+
+.welcome-btn:hover {
+  background: var(--accent-dim);
+  box-shadow: 0 12px 30px rgba(0, 255, 135, 0.4);
+  transform: translateY(-2px);
+}
+
+.welcome-btn:active {
+  transform: scale(0.98);
+}
+
+@keyframes welcomeFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes welcomeFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes welcomeFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes welcomeGlow {
+  0% { transform: scale(0.85); opacity: 0.2; }
+  100% { transform: scale(1.1); opacity: 0.45; }
+}
+

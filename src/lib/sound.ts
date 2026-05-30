@@ -57,6 +57,14 @@ export function playGiveUp() { playTone(200, 0.4, 'sawtooth'); }
 export function playMilestone() { playTone(784, 0.2); setTimeout(() => playTone(988, 0.2), 200); setTimeout(() => playTone(1175, 0.6), 400); }
 export function playClick() { playTone(600, 0.05, 'sine'); }
 
+export function playWelcomeChime() {
+  playTone(440, 0.15, 'triangle');
+  setTimeout(() => playTone(554.37, 0.15, 'triangle'), 100);
+  setTimeout(() => playTone(659.25, 0.15, 'triangle'), 200);
+  setTimeout(() => playTone(880, 0.4, 'triangle'), 300);
+}
+
+
 // --- Haptics (Vibration API) ---
 function vibrate(pattern: number | number[]) {
   if (!getSettings().hapticEnabled) return;

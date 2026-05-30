@@ -4,9 +4,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getAvatarPrefs, saveAvatarPrefs, CHARACTER_STYLES, YOUR_AURA_COLORS, GHOST_AURA_COLORS, AvatarPrefs } from '@/lib/avatar';
 import { calculateTier, UserProfile } from '@/lib/types';
-import { getWinCount } from '@/lib/db';
-import { supabase } from '@/lib/supabase';
 import { Avatar } from '@/components/Avatar';
+import { saveProfile, getProfile, getWinCount } from '@/lib/db';
+import { useAppStore } from '@/store/appStore';
+import { supabase } from '@/lib/supabase';
 
 async function uploadAvatarPhoto(file: File, type: 'user' | 'ghost'): Promise<string | null> {
   const { data: { user } } = await supabase.auth.getUser();
@@ -90,8 +91,31 @@ export default function AvatarPage() {
     }
   }
 
-  function save() {
+  async function save() {
     saveAvatarPrefs(prefs);
+    
+    // Sync to main UserProfile
+    const currentProfile = await getProfile();
+    if (currentProfile) {
+      const updatedProfile = {
+        ...currentProfile,
+        characterStyle: prefs.yourCharacterStyle,
+        auraColor: prefs.yourAuraColor,
+        characterName: prefs.yourCharacterName,
+        ghostStyle: prefs.ghostCharacterStyle,
+        ghostAuraColor: prefs.ghostAuraColor,
+        ghostName: prefs.ghostCharacterName,
+        usesCustomAvatar: prefs.yourUsesPhoto,
+        customAvatarDataUrl: prefs.yourPhotoUrl || undefined,
+        usesCustomGhost: prefs.ghostUsesPhoto,
+        customGhostDataUrl: prefs.ghostPhotoUrl || undefined,
+      };
+      await saveProfile(updatedProfile);
+      
+      // Update global store for instant reflect
+      useAppStore.getState().updateProfile(updatedProfile);
+    }
+
     setSaved(true);
     setTimeout(() => router.push('/profile'), 800);
   }
