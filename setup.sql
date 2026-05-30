@@ -115,6 +115,19 @@ create or replace trigger on_auth_user_created
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS soul_coins integer DEFAULT 0;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS unlocked_cosmetics text[] DEFAULT '{}';
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS equipped_cosmetics jsonb DEFAULT '{}';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS weight_kg float DEFAULT 75;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS current_streak integer DEFAULT 0;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS character_style text DEFAULT 'warrior';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS aura_color text DEFAULT '#00FF87';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS character_name text DEFAULT 'YOU';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ghost_style text DEFAULT 'warrior';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ghost_aura_color text DEFAULT '#FFFFFF';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ghost_name text DEFAULT 'GHOST';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS uses_custom_avatar boolean DEFAULT false;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS custom_avatar_data_url text;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS uses_custom_ghost boolean DEFAULT false;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS custom_ghost_data_url text;
+
 
 CREATE OR REPLACE FUNCTION add_soul_coins(user_id uuid, amount integer)
 RETURNS void LANGUAGE sql AS $$

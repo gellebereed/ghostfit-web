@@ -86,30 +86,41 @@ export async function getProfile(): Promise<UserProfile | null> {
 }
 
 export async function saveProfile(profile: UserProfile): Promise<void> {
-  const userId = await uid();
-  if (!userId) return;
-
-  await supabase.from('profiles').upsert({
-    id: userId,
-    equipment: profile.equipment,
-    goal: profile.goal,
-    current_week: profile.currentWeek,
-    onboarding_complete: profile.onboardingComplete,
-    weight_kg: profile.weight_kg,
-    current_streak: profile.current_streak,
-    character_style: profile.characterStyle,
-    aura_color: profile.auraColor,
-    character_name: profile.characterName,
-    ghost_style: profile.ghostStyle,
-    ghost_aura_color: profile.ghostAuraColor,
-    ghost_name: profile.ghostName,
-    uses_custom_avatar: profile.usesCustomAvatar,
-    custom_avatar_data_url: profile.customAvatarDataUrl,
-    uses_custom_ghost: profile.usesCustomGhost,
-    custom_ghost_data_url: profile.customGhostDataUrl,
-  });
+  // Update memory and local storage first for instant feedback
   localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));
   memoryCache.profile = profile;
+
+  try {
+    const userId = await uid();
+    if (!userId) return;
+
+    const { error } = await supabase.from('profiles').upsert({
+      id: userId,
+      equipment: profile.equipment,
+      goal: profile.goal,
+      current_week: profile.currentWeek,
+      onboarding_complete: profile.onboardingComplete,
+      weight_kg: profile.weight_kg,
+      current_streak: profile.current_streak,
+      character_style: profile.characterStyle,
+      aura_color: profile.auraColor,
+      character_name: profile.characterName,
+      ghost_style: profile.ghostStyle,
+      ghost_aura_color: profile.ghostAuraColor,
+      ghost_name: profile.ghostName,
+      uses_custom_avatar: profile.usesCustomAvatar,
+      custom_avatar_data_url: profile.customAvatarDataUrl,
+      uses_custom_ghost: profile.usesCustomGhost,
+      custom_ghost_data_url: profile.customGhostDataUrl,
+    });
+    
+    if (error) {
+      console.warn('DB Profile save failed (columns may be missing):', error.message);
+      // We don't throw here so the local update still feels successful
+    }
+  } catch (err) {
+    console.error('saveProfile error:', err);
+  }
 }
 
 export async function updateStreak(

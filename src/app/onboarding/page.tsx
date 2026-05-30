@@ -1,116 +1,89 @@
 'use client';
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { EQUIPMENT_ICONS, ALL_EQUIPMENT } from '@/lib/equipment-icons';
 
-export default function EquipmentPage() {
+export default function NamePage() {
   const router = useRouter();
-  const cameraRef = useRef<HTMLInputElement>(null);
-  const galleryRef = useRef<HTMLInputElement>(null);
-  const [equipment, setEquipment] = useState<string[]>([]);
-  const [showList, setShowList] = useState(false);
-  const [scanning, setScanning] = useState(false);
-
-  function toggle(item: string) {
-    setEquipment(prev => prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]);
-  }
-
-  async function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setScanning(true);
-    try {
-      const base64 = await new Promise<string>((res, rej) => {
-        const r = new FileReader();
-        r.onload = () => res((r.result as string).split(',')[1]);
-        r.onerror = rej;
-        r.readAsDataURL(file);
-      });
-      const resp = await fetch('/api/vision', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: base64 }),
-      });
-      const data = await resp.json();
-      if (data.equipment?.length) {
-        setEquipment(prev => [...new Set([...prev, ...data.equipment])]);
-      }
-    } catch {}
-    setScanning(false);
-  }
+  const [name, setName] = useState('');
 
   function handleNext() {
-    sessionStorage.setItem('ghostfit_equipment', JSON.stringify(equipment));
-    router.push('/onboarding/goal');
+    if (!name.trim()) return;
+    sessionStorage.setItem('ghostfit_name', name.trim());
+    router.push('/onboarding/equipment');
   }
 
   return (
-    <div className="page">
+    <div className="page" style={{ paddingTop: 10 }}>
+      <header className="hdr" style={{ background: 'transparent', border: 'none', justifyContent: 'center', padding: '0 0 20px 0' }}>
+        <span className="hdr-logo">GHOSTFIT</span>
+      </header>
+
       <div className="onb-progress">
-        1 OF 3 <div className="onb-dot active" /> <div className="onb-dot" /> <div className="onb-dot" />
+        <div className="onb-dot active" /> <div className="onb-dot" /> <div className="onb-dot" />
+        <span style={{ marginLeft: 8 }}>1 OF 3</span>
       </div>
 
-      <h1 className="onb-title">What equipment<br /><span className="green">do you have?</span></h1>
-      <p className="onb-sub">We&apos;ll build your plan around what you actually own.</p>
+      <h1 className="onb-title">Welcome, Fighter.<br /><span className="green">What is your name?</span></h1>
+      <p className="onb-sub">We will use this to track your stats and battle record.</p>
 
-      <div className="onb-options">
-        <div className="onb-option" onClick={() => cameraRef.current?.click()}>
-          <div className="icon">📷</div>
-          <h3>Take a Photo</h3>
-          <p>Point at your equipment</p>
+      <div style={{ marginTop: 40, animation: 'fadeIn 0.5s ease forwards' }}>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 12, 
+          background: 'var(--surface)', 
+          padding: '16px 20px', 
+          borderRadius: 'var(--r)', 
+          border: '1px solid var(--border)',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
+          transition: 'border-color 0.25s'
+        }}
+        className="name-input-container"
+        >
+          <span style={{ fontSize: 24 }}>🥷</span>
+          <input 
+            type="text" 
+            value={name} 
+            onChange={(e) => setName(e.target.value.toUpperCase())}
+            placeholder="ENTER YOUR NAME"
+            maxLength={10}
+            autoFocus
+            style={{ 
+              flex: 1, 
+              background: 'transparent', 
+              border: 'none', 
+              color: 'var(--text)', 
+              fontSize: 20, 
+              fontWeight: 800, 
+              outline: 'none',
+              letterSpacing: '1px'
+            }}
+          />
         </div>
-        <div className="onb-option" onClick={() => galleryRef.current?.click()}>
-          <div className="icon">🖼️</div>
-          <h3>Upload Photo</h3>
-          <p>Choose from gallery</p>
-        </div>
-        <div className="onb-option" onClick={() => setShowList(!showList)}>
-          <div className="icon">☰</div>
-          <h3>Pick from List</h3>
-          <p>Choose manually</p>
-        </div>
+        <p style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'center', marginTop: 10, letterSpacing: '0.5px' }}>
+          MAXIMUM 10 CHARACTERS
+        </p>
       </div>
 
-      {/* Camera: forces camera capture */}
-      <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="camera-input" onChange={handlePhoto} />
-      {/* Gallery: opens photo library */}
-      <input ref={galleryRef} type="file" accept="image/*" className="camera-input" onChange={handlePhoto} />
-
-      {scanning && <div className="loading"><div className="loader" /><p style={{marginTop: 12, color: 'var(--text2)'}}>AI scanning equipment...</p></div>}
-
-      {showList && (
-        <div className="equip-card-grid">
-          {ALL_EQUIPMENT.map(e => (
-            <div key={e} className={`equip-card ${equipment.includes(e) ? 'selected' : ''}`} onClick={() => toggle(e)}>
-              <svg className="eqicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d={EQUIPMENT_ICONS[e] || EQUIPMENT_ICONS['Bodyweight Only']} />
-              </svg>
-              <span className="eqname">{e}</span>
-              {equipment.includes(e) && <span className="eq-check">✓</span>}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {equipment.length > 0 && (
-        <>
-          <div className="equip-label">Current Inventory ({equipment.length})</div>
-          <div className="equip-card-grid">
-            {equipment.map(e => (
-              <div key={e} className="equip-card selected">
-                <svg className="eqicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d={EQUIPMENT_ICONS[e] || EQUIPMENT_ICONS['Bodyweight Only']} />
-                </svg>
-                <span className="eqname">{e}</span>
-                <button className="eq-remove" onClick={(ev) => { ev.stopPropagation(); toggle(e); }}>×</button>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      <button className="btn-primary" disabled={equipment.length === 0} onClick={handleNext} style={{ marginTop: 24 }}>
+      <button 
+        className="btn-primary" 
+        disabled={!name.trim()} 
+        onClick={handleNext} 
+        style={{ marginTop: 60 }}
+      >
         Next →
       </button>
+
+      <style jsx>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .name-input-container:focus-within {
+          border-color: var(--accent) !important;
+          box-shadow: 0 0 15px rgba(0, 255, 135, 0.15) !important;
+        }
+      `}</style>
     </div>
   );
 }

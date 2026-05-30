@@ -556,7 +556,7 @@ function ExerciseContent() {
                   ? `0 0 20px ${auraColor}, inset 0 0 15px ${auraColor}` : 'none',
                 display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}>
-                <Avatar type="user" size={80} tier={tier} animationState={ahead || justScored ? 'celebrating' : 'idle'} />
+                <Avatar type="user" size={72} tier={tier} animationState={ahead || justScored ? 'celebrating' : 'idle'} />
                 {justScored && <div className="fc-flash" />}
               </div>
               <div className="fc-label green">{profile?.characterName ?? 'YOU'}</div>
@@ -598,7 +598,7 @@ function ExerciseContent() {
                 boxShadow: !ahead && ghost ? '0 0 15px rgba(255,255,255,0.05)' : 'none',
                 display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}>
-                <Avatar type="ghost" size={80} animationState={ahead ? 'losing' : 'idle'} />
+                <Avatar type="ghost" size={72} animationState={ahead ? 'losing' : 'idle'} />
                 {ahead && !(ghost as any)?.isInitiation && <div className="fc-defeated">💀</div>}
               </div>
               <div className="fc-label ghost-label">{profile?.ghostName ?? 'GHOST'}</div>
@@ -610,31 +610,29 @@ function ExerciseContent() {
             <div className="fc-first-time">First time — set your benchmark 👻</div>
           )}
 
-          {/* Arena floor line */}
-          <div className="arena-floor" />
+        {/* Arena floor line */}
+        <div className="arena-floor" />
+      </div>
+
+      {/* Exercise info - added px-5 */}
+      <div className="ex-detail px-5 mt-2">
+        <h2 className="text-xl font-black">{exercise.name}</h2>
+      </div>
+
+      {/* Tutorial — true full bleed */}
+      <div className="mb-4">
+        <div className="px-5 mb-1.5 flex items-center justify-between">
+          <p className="text-[#00FF87] text-[10px] font-black
+                        tracking-widest uppercase">
+            Tutorial
+          </p>
+          {videoId && (
+            <p className="text-gray-700 text-[9px] font-bold">YouTube</p>
+          )}
         </div>
 
-        {/* Exercise info */}
-        <div className="ex-detail">
-          <h2>{exercise.name}</h2>
-        </div>
-
-        {/* Tutorial — full bleed, breaks out of parent padding */}
-        <div className="mb-6"
-             style={{ marginLeft: '-1.25rem', marginRight: '-1.25rem' }}>
-
-          <div className="px-5 mb-2 flex items-center justify-between">
-            <p className="text-[#00FF87] text-[11px] font-black
-                          tracking-widest uppercase">
-              Tutorial
-            </p>
-            {videoId && (
-              <p className="text-gray-700 text-[10px]">YouTube</p>
-            )}
-          </div>
-
-          <div className="relative w-full bg-[#141414]"
-               style={{ aspectRatio: '16/9' }}>
+        <div className="relative w-full bg-[#141414] overflow-hidden"
+             style={{ aspectRatio: '16/9', border: 'none' }}>
 
             {/* Skeleton while loading */}
             {videoLoading && (
@@ -681,13 +679,13 @@ function ExerciseContent() {
           </div>
         </div>
 
-        {/* Instructions */}
+        {/* Instructions - added px-5 */}
         {instructions.length > 0 && (
-          <div className="instructions-list">
+          <div className="instructions-list px-5 mb-4">
             {instrToShow.map((step, i) => (
               <div className="instr-step" key={i}>
                 <div className="instr-num">{i + 1}</div>
-                <span>{step}</span>
+                <span className="text-sm">{step}</span>
               </div>
             ))}
             {instructions.length > 2 && (
@@ -712,15 +710,15 @@ function ExerciseContent() {
         </div>
 
         {/* Bottom utility bar */}
-        <div className="flex justify-between items-center px-5 py-6 border-t border-white/5 bg-black/60">
+        <div className="sl-footer mt-auto">
           <button 
-            className="text-[10px] font-black text-gray-600 hover:text-red-500 transition-colors tracking-widest uppercase"
+            className="sl-footer-btn"
             onClick={() => setShowGiveUp(true)}
           >
             End Workout Early
           </button>
           
-          <div className="text-[9px] text-gray-700 font-mono uppercase tracking-[0.2em] opacity-50">
+          <div className="sl-footer-sys">
             SYSTEM V1.4 // {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </div>
         </div>

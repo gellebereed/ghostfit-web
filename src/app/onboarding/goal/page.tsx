@@ -31,8 +31,8 @@ export default function GoalPage() {
       </header>
 
       <div className="onb-progress">
-        <div className="onb-dot active" /> <div className="onb-dot active" /> <div className="onb-dot" />
-        <span style={{ marginLeft: 8 }}>2 OF 3</span>
+        <div className="onb-dot active" /> <div className="onb-dot active" /> <div className="onb-dot active" />
+        <span style={{ marginLeft: 8 }}>3 OF 3</span>
       </div>
 
       <h1 className="onb-title">What&apos;s your goal?</h1>
