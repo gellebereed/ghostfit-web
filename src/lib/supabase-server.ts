@@ -19,7 +19,7 @@ export async function createSupabaseServerClient() {
             );
           } catch {
             // Called from a Server Component — cookies can't be set,
-            // but session refresh still works via middleware
+            // but session refresh still works via proxy
           }
         },
       },
