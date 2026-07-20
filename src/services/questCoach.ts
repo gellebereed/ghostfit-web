@@ -1,7 +1,6 @@
 // AI quest coach — decomposes a goal into concrete first tasks.
 // Implementation-intention style: every task is a specific, finishable action.
-
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
+import { generateJSON } from './llm';
 
 export interface SuggestedTask {
   title: string;
@@ -15,7 +14,6 @@ export async function breakdownQuest(opts: {
   questType: string;
   targetDate?: string | null;
 }): Promise<SuggestedTask[]> {
-  const apiKey = process.env.OPENAI_API_KEY;
   const prompt = `You are a ruthless-but-kind productivity coach. The user set a goal;
 break it into the first concrete tasks that create momentum.
 
@@ -34,22 +32,13 @@ Rules:
 Return ONLY valid JSON:
 { "tasks": [ { "title": "...", "priority": 1, "dueOffsetDays": 0 } ] }`;
 
-  const res = await fetch(OPENAI_URL, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: prompt },
-        { role: 'user', content: 'Break down my goal' },
-      ],
-      max_tokens: 1000,
-      response_format: { type: 'json_object' },
-    }),
+  const parsed = await generateJSON<{ tasks: unknown[] }>({
+    system: prompt,
+    user: 'Break down my goal',
+    maxTokens: 2048,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    validate: p => Array.isArray(p?.tasks) && p.tasks.length >= 3 && p.tasks.every((t: any) => t?.title),
   });
-  if (!res.ok) throw new Error(await res.text());
-  const data = await res.json();
-  const parsed = JSON.parse(data.choices?.[0]?.message?.content || '{}');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (parsed.tasks ?? []).slice(0, 8).map((t: any) => ({
     title: String(t.title ?? '').slice(0, 200),

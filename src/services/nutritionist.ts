@@ -5,28 +5,7 @@
  * taunts, the nutritionist never does. Keep generated copy encouraging.
  */
 import { FoodItem, MealPlan } from '@/lib/types';
-
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
-
-async function callOpenAI(prompt: string, userMsg: string, maxTokens: number): Promise<string> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  const res = await fetch(OPENAI_URL, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: prompt },
-        { role: 'user', content: userMsg },
-      ],
-      max_tokens: maxTokens,
-      response_format: { type: 'json_object' },
-    }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content || '{}';
-}
+import { generateJSON } from './llm';
 
 const VALID_CATEGORIES = ['protein', 'carb', 'vegetable', 'fruit', 'dairy', 'fat', 'snack', 'drink'];
 
@@ -69,8 +48,12 @@ Return ONLY valid JSON:
   ]
 }`;
 
-  const content = await callOpenAI(prompt, `Build the ${countryName} food catalog`, 8000);
-  const parsed = JSON.parse(content);
+  const parsed = await generateJSON<{ foods: unknown[] }>({
+    system: prompt,
+    user: `Build the ${countryName} food catalog`,
+    maxTokens: 16384,
+    validate: p => Array.isArray(p?.foods) && p.foods.length >= 40,
+  });
   const foods = (parsed.foods ?? [])
     .map(sanitizeFood)
     .filter(Boolean) as FoodItem[];
@@ -88,8 +71,13 @@ Return ONLY valid JSON:
 { "id": "kebab-slug", "name": "Cleaned Up Name", "category": "protein|carb|vegetable|fruit|dairy|fat|snack|drink",
   "serving": "${serving || 'a sensible standard serving'}", "kcal": 0, "protein": 0, "carbs": 0, "fat": 0 }`;
 
-  const content = await callOpenAI(prompt, `Food: ${name}${serving ? ` — serving: ${serving}` : ''}`, 400);
-  const parsed = JSON.parse(content);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const parsed = await generateJSON<any>({
+    system: prompt,
+    user: `Food: ${name}${serving ? ` — serving: ${serving}` : ''}`,
+    maxTokens: 1024,
+    validate: p => p?.error === 'not_food' || (typeof p?.name === 'string' && typeof p?.kcal === 'number'),
+  });
   if (parsed.error) return null;
   const food = sanitizeFood(parsed);
   if (food) food.isCustom = true;
@@ -189,7 +177,13 @@ Return ONLY valid JSON:
 }
 All 7 days, ${req.mealsPerDay} meals each.`;
 
-  const content = await callOpenAI(prompt, 'Build my meal plan', 8000);
-  const parsed = JSON.parse(content);
+  const parsed = await generateJSON<{ days: unknown[] }>({
+    system: prompt,
+    user: 'Build my meal plan',
+    maxTokens: 16384,
+    validate: p => Array.isArray(p?.days) && p.days.length === 7 &&
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      p.days.every((d: any) => Array.isArray(d?.meals) && d.meals.length === req.mealsPerDay),
+  });
   return sanitizeMealPlan(parsed, req.weekNumber);
 }

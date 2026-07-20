@@ -1,4 +1,7 @@
+// NOTE: legacy filename — plan generation now runs through the provider-
+// agnostic LLM layer (Gemini → Qwen → OpenAI) in services/llm.ts.
 import { WorkoutPlan } from '@/lib/types';
+import { generateJSON } from './llm';
 
 const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -104,7 +107,6 @@ export function sanitizePlan(plan: WorkoutPlan, userEquipment: string[]): Workou
 }
 
 export async function generateWorkoutPlan(equipment: string[], goal: string, weekNumber: number = 1) {
-  const apiKey = process.env.OPENAI_API_KEY;
   const { todayName, orderedDays } = getOrderedDays();
 
   const prompt = `You are an expert fitness coach creating a personalized 
@@ -232,29 +234,18 @@ Return ONLY valid JSON, no markdown, no explanation:
   ]
 }`;
 
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: prompt },
-        { role: 'user', content: 'Generate my workout plan' }
-      ],
-      max_tokens: 2000,
-      response_format: { type: 'json_object' }
-    }),
+  const plan = await generateJSON<WorkoutPlan>({
+    system: prompt,
+    user: 'Generate my workout plan',
+    maxTokens: 4096,
+    validate: p => Array.isArray(p?.days) && p.days.length === 7 &&
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      p.days.every((d: any) => d.isRest === true || (Array.isArray(d.exercises) && d.exercises.length > 0)),
   });
-
-  if (!res.ok) throw new Error(await res.text());
-  const data = await res.json();
-  const content = data.choices?.[0]?.message?.content || '{}';
-  const plan = JSON.parse(content);
   return sanitizePlan(plan, equipment);
 }
 
 export async function adaptWorkoutPlan(equipment: string[], goal: string, lastPlan: WorkoutPlan, performance: any) {
-  const apiKey = process.env.OPENAI_API_KEY;
   const { todayName, orderedDays } = getOrderedDays();
   const nextWeek = (lastPlan?.weekNumber || 0) + 1;
 
@@ -331,23 +322,13 @@ Return JSON matching the same format:
   "days": [...]
 }`;
 
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: prompt },
-        { role: 'user', content: 'Generate adapted plan' }
-      ],
-      max_tokens: 2000,
-      response_format: { type: 'json_object' }
-    }),
+  const plan = await generateJSON<WorkoutPlan>({
+    system: prompt,
+    user: 'Generate adapted plan',
+    maxTokens: 4096,
+    validate: p => Array.isArray(p?.days) && p.days.length === 7 &&
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      p.days.every((d: any) => d.isRest === true || (Array.isArray(d.exercises) && d.exercises.length > 0)),
   });
-
-  if (!res.ok) throw new Error(await res.text());
-  const data = await res.json();
-  const content = data.choices?.[0]?.message?.content || '{}';
-  const plan = JSON.parse(content);
   return sanitizePlan(plan, equipment);
 }
