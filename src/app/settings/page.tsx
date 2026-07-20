@@ -26,6 +26,7 @@ export default function SettingsPage() {
   const [resetting, setResetting] = useState(false);
   const [showRegenConfirm, setShowRegenConfirm] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [commitmentTime, setCommitmentTime] = useState('');
 
   useEffect(() => {
     loadData();
@@ -33,7 +34,11 @@ export default function SettingsPage() {
 
   async function loadData() {
     const profile = await getProfile();
-    if (profile) { setGoal(profile.goal); setEquipment(profile.equipment); }
+    if (profile) {
+      setGoal(profile.goal);
+      setEquipment(profile.equipment);
+      setCommitmentTime(profile.commitmentTime ?? '');
+    }
     const s = getAppSettings();
     setSoundOn(s.soundEnabled);
     setHapticOn(s.hapticEnabled);
@@ -55,6 +60,12 @@ export default function SettingsPage() {
     setRestStretch(v);
     const raw = getAppSettings();
     localStorage.setItem('ghostfit_settings', JSON.stringify({ ...raw, restDayStretch: v }));
+  }
+
+  async function changeCommitment(time: string) {
+    setCommitmentTime(time);
+    const profile = await getProfile();
+    if (profile) await saveProfile({ ...profile, commitmentTime: time || null });
   }
 
   async function changeGoal(newGoal: string) {
@@ -157,6 +168,33 @@ export default function SettingsPage() {
           <div className="row-left">{goalInfo?.icon} {goalInfo?.title || 'Set Goal'}</div>
           <div className="row-right">Change →</div>
         </div>
+      </div>
+
+      {/* Commitment */}
+      <div className="settings-section">
+        <div className="settings-section-title">MY COMMITMENT</div>
+        <p style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 8 }}>
+          People who commit to a specific time are about twice as likely to follow through. The ghost will hold you to it.
+        </p>
+        <div className="settings-row">
+          <div className="row-left">⏰ I train at</div>
+          <input
+            type="time"
+            value={commitmentTime}
+            onChange={e => changeCommitment(e.target.value)}
+            style={{
+              background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8,
+              color: commitmentTime ? 'var(--accent)' : 'var(--text2)', padding: '8px 10px',
+              fontFamily: 'inherit', fontSize: 14, fontWeight: 700, colorScheme: 'dark',
+            }}
+          />
+        </div>
+        {commitmentTime && (
+          <button
+            style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 12, cursor: 'pointer', padding: '8px 0', fontFamily: 'inherit' }}
+            onClick={() => changeCommitment('')}
+          >Remove commitment</button>
+        )}
       </div>
 
       {/* Preferences */}

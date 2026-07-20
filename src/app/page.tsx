@@ -1,4 +1,5 @@
 'use client';
+import BottomNav from '@/components/BottomNav';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -6,6 +7,7 @@ import { getProfile, getCurrentPlan, getYesterdayResult, getWinCount, getStreak,
 import { WorkoutPlan, WorkoutDay, calculateTier } from '@/lib/types';
 import { getAvatarPrefs, getCharEmoji } from '@/lib/avatar';
 import { getGhostTaunt } from '@/lib/taunts';
+import { getFocusTheme } from '@/lib/theme';
 
 import { useAppStore } from '@/store/appStore';
 import { Avatar } from '@/components/Avatar';
@@ -35,17 +37,6 @@ function formatExerciseDetail(exercise: any): string {
   return `${sets} × ${reps}`;
 }
 
-const WORKOUT_FOCUS_IMAGES: Record<string, string> = {
-  'Upper Body': 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Bench_Press_-_Medium_Grip/0.jpg',
-  'Lower Body': 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Full_Squat/0.jpg',
-  'Push':       'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Bench_Press_-_Medium_Grip/0.jpg',
-  'Pull':       'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Curl/0.jpg',
-  'Legs':       'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Full_Squat/0.jpg',
-  'Core':       'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Ab_Crunch_Machine/0.jpg',
-  'Cardio':     'https://images.unsplash.com/photo-1538805060514-97d9cc17730c?auto=format&fit=crop&w=400&q=80',
-  'Full Body':  'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Deadlift/0.jpg',
-};
-
 export default function HomePage() {
   const router = useRouter();
   const { profile, refreshProfile } = useAppStore();
@@ -60,6 +51,8 @@ export default function HomePage() {
   const [completed, setCompleted] = useState<Set<string>>(new Set());
   const [completedDays, setCompletedDays] = useState<Set<number>>(new Set());
   const [taunt, setTaunt] = useState('');
+  const [daysAway, setDaysAway] = useState<number | null>(null);
+  const [freshStart, setFreshStart] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -113,11 +106,28 @@ export default function HomePage() {
         setCompletedDays(thisWeek);
 
         const isFirstDay = sessions.length === 0;
+
+        // Ghost power: how long has the ghost been feeding on your absence?
+        let away: number | null = null;
+        if (sessions.length > 0) {
+          const latest = Math.max(...sessions.map(sess => sess.date));
+          away = Math.floor((Date.now() - latest) / 86400000);
+        }
+        setDaysAway(away);
+
+        // Fresh-start effect: Monday / 1st of month with no streak = clean slate framing
+        const now2 = new Date();
+        setFreshStart(
+          sessions.length > 0 && s === 0 &&
+          (now2.getDay() === 1 || now2.getDate() === 1)
+        );
+
         setTaunt(getGhostTaunt({
           yesterdayResult: result,
           streak: s,
           isRest,
           isFirstDay,
+          daysAway: away,
         }));
       } catch (err) {
         console.error('GhostFit init error:', err);
@@ -147,6 +157,9 @@ export default function HomePage() {
 
   const isRest = today?.isRest;
   const allDone = today && !isRest && today.exercises.every(ex => completed.has(ex.name));
+  // Ghost feeds after 2+ days away (capped visual power at 7 days)
+  const ghostFed = !isRest && !allDone && daysAway !== null && daysAway >= 2;
+  const ghostPower = ghostFed ? Math.min(daysAway!, 7) : 0;
 
   return (
     <>
@@ -159,17 +172,53 @@ export default function HomePage() {
       />
       <header className="hdr">
         <span className="hdr-logo">👻 GHOSTFIT</span>
-        {streak > 0 && <span style={{ color: 'var(--accent)', fontSize: 13, fontWeight: 700 }}>{streak} day streak 🔥</span>}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {(profile?.streakShields ?? 0) > 0 && (
+            <span style={{ fontSize: 13, fontWeight: 700 }} title="Streak Shields">🛡️×{profile?.streakShields}</span>
+          )}
+          {streak > 0 && <span style={{ color: 'var(--accent)', fontSize: 13, fontWeight: 700 }}>{streak} day streak 🔥</span>}
+        </span>
       </header>
 
       <div className="greeting">
         <h1>{getGreeting()}, let&apos;s go 💪</h1>
         <p>Week {plan?.weekNumber || 1} · {today?.focus || 'Rest'} today</p>
+        {profile?.commitmentTime && !isRest && !allDone && (
+          <p className="commitment-line">
+            {isPastTime(profile.commitmentTime)
+              ? `⏰ It's past ${profile.commitmentTime}. The ghost noticed you're late.`
+              : `⏰ You told the ghost you'd show up at ${profile.commitmentTime}. It remembers.`}
+          </p>
+        )}
       </div>
 
-      <div className={`battle-card ${isRest ? 'rest' : allDone ? 'win' : battleResult === 'win' ? 'win' : battleResult === 'loss' ? 'loss' : 'first'}`}>
+      {freshStart && (
+        <div className="fresh-start">
+          🌅 <strong>Fresh start.</strong> Last week is dead — the ghost isn&apos;t. The comeback begins today.
+        </div>
+      )}
+
+      <div className={`battle-card ${isRest ? 'rest' : allDone ? 'win' : ghostFed ? 'loss' : battleResult === 'win' ? 'win' : battleResult === 'loss' ? 'loss' : 'first'}`}>
         {allDone && <div className="today-chip" style={{ background: 'var(--accent)', color: '#000', top: 12, right: 12 }}>COMPLETED ✓</div>}
-        {isRest ? (
+        {!isRest && !allDone && ghostFed ? (
+          <>
+            <div className="battle-arena">
+              <div className="flex flex-col items-center gap-2" style={{ opacity: 0.55, filter: 'saturate(0.6)' }}>
+                <Avatar type="user" size={52} tier={tier} animationState="losing" />
+                <span className="text-[10px] font-bold text-white uppercase tracking-widest">{profile?.characterName ?? 'YOU'}</span>
+              </div>
+              <div className="battle-vs">VS</div>
+              <div className="flex flex-col items-center gap-2 ghost-fed" style={{ ['--ghost-scale' as string]: String(1 + ghostPower * 0.06) }}>
+                <Avatar type="ghost" size={60 + ghostPower * 4} animationState="celebrating" />
+                <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--loss-red)' }}>{profile?.ghostName ?? 'GHOST'}</span>
+              </div>
+            </div>
+            <div className="battle-result">
+              <h3 style={{ color: 'var(--loss-red)' }}>👿 THE GHOST HAS FED</h3>
+              <p>{daysAway} days without training. Every day you skip, it grows. Take your power back.</p>
+            </div>
+          </>
+        ) : isRest ? (
           <div className="battle-result">
             <h3>😴 Rest Day</h3>
             <p>Ghost is also resting. Come back tomorrow!</p>
@@ -222,7 +271,7 @@ export default function HomePage() {
 
         {!isRest && (
           <Link href="/workout" className="btn-primary" style={{ marginTop: 12, textDecoration: 'none' }}>
-            {allDone ? 'REVISIT WORKOUT' : battleResult === 'loss' ? 'GET REVENGE →' : battleResult === 'win' ? 'START TODAY\'S BATTLE' : 'START WORKOUT'}
+            {allDone ? 'REVISIT WORKOUT' : ghostFed ? 'STARVE THE GHOST →' : battleResult === 'loss' ? 'GET REVENGE →' : battleResult === 'win' ? 'START TODAY\'S BATTLE' : 'START WORKOUT'}
           </Link>
         )}
       </div>
@@ -230,13 +279,12 @@ export default function HomePage() {
       {today && !today.isRest && (
         <div className="today-hero-card">
           <div className="today-hero-img-wrap">
-            {WORKOUT_FOCUS_IMAGES[today.focus] && (
-              <img
-                src={WORKOUT_FOCUS_IMAGES[today.focus]}
-                alt={today.focus}
-                className="today-hero-img"
-              />
-            )}
+            <div
+              className="today-hero-img focus-hero"
+              style={{ background: `linear-gradient(135deg, ${getFocusTheme(today.focus).from}, ${getFocusTheme(today.focus).to})` }}
+            >
+              <span className="focus-hero-emoji">{getFocusTheme(today.focus).emoji}</span>
+            </div>
             <div className="today-hero-gradient" />
             <div className="today-hero-chip">TODAY</div>
             <div className="today-hero-meta">
@@ -296,20 +344,7 @@ export default function HomePage() {
         </Link>
       </div>
 
-      <nav className="nav">
-        <Link href="/" className="nav-item active">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-          HOME
-        </Link>
-        <Link href="/history" className="nav-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          HISTORY
-        </Link>
-        <Link href="/profile" className="nav-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          PROFILE
-        </Link>
-      </nav>
+      <BottomNav active="home" />
     </>
   );
 }
@@ -319,5 +354,12 @@ function getGreeting(): string {
   if (h < 12) return 'Good morning';
   if (h < 17) return 'Good afternoon';
   return 'Good evening';
+}
+
+function isPastTime(hhmm: string): boolean {
+  const [h, m] = hhmm.split(':').map(Number);
+  if (isNaN(h)) return false;
+  const now = new Date();
+  return now.getHours() > h || (now.getHours() === h && now.getMinutes() >= (m || 0));
 }
 

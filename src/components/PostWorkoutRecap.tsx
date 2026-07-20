@@ -1,8 +1,10 @@
 'use client';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { Avatar } from './Avatar';
 import { calculateCaloriesBurned, getDisplayCalories } from '@/utils/calorieCalculator';
+import { ChestDrop, chestMeta } from '@/lib/chest';
+import { arcadeSounds } from '@/utils/arcadeSounds';
 
 interface PostWorkoutRecapProps {
   workoutResult: 'win' | 'loss';
@@ -20,6 +22,9 @@ interface PostWorkoutRecapProps {
   exercisesWon: number;
   totalExercises: number;
   durationSeconds: number;
+  chest?: ChestDrop;
+  tierLabel?: string;
+  shieldUsed?: boolean;
   onContinue: () => void;
 }
 
@@ -32,9 +37,21 @@ export default function PostWorkoutRecap({
   exercisesWon,
   totalExercises,
   durationSeconds,
+  chest,
+  tierLabel,
+  shieldUsed,
   onContinue
 }: PostWorkoutRecapProps) {
   const profile = useAppStore(state => state.profile);
+  const [chestOpened, setChestOpened] = useState(false);
+
+  function openChest() {
+    if (chestOpened) return;
+    setChestOpened(true);
+    if (localStorage.getItem('ghostfit_sound_enabled') !== 'false') {
+      try { arcadeSounds.coinEarned(); } catch { /* sound is optional */ }
+    }
+  }
   const calories = calculateCaloriesBurned(
     exerciseSessions,
     profile?.weight_kg ?? 75
@@ -168,7 +185,17 @@ export default function PostWorkoutRecap({
               {newStreak} day win streak 🔥
             </p>
           )}
-          {!isWin && (
+          {isWin && tierLabel && (
+            <p className="text-gray-500 text-xs mt-0.5">
+              Showing up like this is what a {tierLabel} does.
+            </p>
+          )}
+          {!isWin && shieldUsed && (
+            <p className="text-[#00FF87] text-xs font-bold mt-0.5">
+              🛡️ Streak Shield absorbed the loss — your streak survives
+            </p>
+          )}
+          {!isWin && !shieldUsed && (
             <p className="text-red-400/60 text-xs mt-0.5">
               Rematch tomorrow — it's waiting 👻
             </p>
@@ -232,6 +259,28 @@ export default function PostWorkoutRecap({
           </p>
         )}
       </div>
+
+      {/* MYSTERY CHEST — outside shareable card */}
+      {chest && (
+        <div className="w-full max-w-[380px] mt-4">
+          {!chestOpened ? (
+            <button onPointerDown={openChest} className="chest-sealed">
+              <span className="chest-sealed-icon">🎁</span>
+              <span className="chest-sealed-label">MYSTERY CHEST — TAP TO OPEN</span>
+            </button>
+          ) : (
+            <div className="chest-open" style={{ borderColor: chestMeta(chest.rarity).color }}>
+              <span className="chest-open-icon">{chestMeta(chest.rarity).emoji}</span>
+              <div className="chest-open-info">
+                <span className="chest-open-rarity" style={{ color: chestMeta(chest.rarity).color }}>
+                  {chestMeta(chest.rarity).label.toUpperCase()} DROP
+                </span>
+                <span className="chest-open-coins">+{chest.coins} Soul Coins</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ACTION BUTTONS — outside shareable card */}
       <div className="w-full max-w-[380px] mt-4 space-y-3">

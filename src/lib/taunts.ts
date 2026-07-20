@@ -5,9 +5,17 @@ export function getGhostTaunt(args: {
   isRest: boolean;
   isFirstDay: boolean;
   winMarginPercent?: number; // how much you beat ghost by as %
+  daysAway?: number | null;  // days since last logged workout
 }): string {
   if (args.isFirstDay) return "Complete your first workout. I'll be watching. 👀";
   if (args.isRest) return "Even I'm resting. See you tomorrow. 😴";
+
+  // The ghost feeds on absence — these override everything else
+  if (args.daysAway != null && args.daysAway >= 2) {
+    if (args.daysAway >= 7) return `${args.daysAway} days. I barely remember your face. I've never been stronger. 👻`;
+    if (args.daysAway >= 4) return `${args.daysAway} days of your absence. Delicious. I grow while you shrink. 💀`;
+    return `Two days without you. I've been feeding on every excuse. 😈`;
+  }
 
   if (args.yesterdayResult === 'none') return "You didn't show up yesterday. I did. 👻";
 

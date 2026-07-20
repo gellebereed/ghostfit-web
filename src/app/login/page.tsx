@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
 function getRedirectUrl() {
-  // If we are in the browser, always use the current origin
   return typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : '';
 }
 
@@ -14,6 +13,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const [earlyEmail, setEarlyEmail] = useState('');
+  const [joining, setJoining] = useState(false);
+  const [earlyError, setEarlyError] = useState<string | null>(null);
+  const [earlySuccess, setEarlySuccess] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -34,7 +38,6 @@ export default function LoginPage() {
       if (error) {
         setError('Invalid email or password.');
       } else {
-        // Redirect immediately on success
         window.location.href = '/';
         return;
       }
@@ -43,7 +46,10 @@ export default function LoginPage() {
   }
 
   async function handleForgotPassword() {
-    if (!email) { setError('Enter your email first.'); return; }
+    if (!email) {
+      setError('Enter your email first.');
+      return;
+    }
     setError(null);
     await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${getRedirectUrl()}?next=/login`,
@@ -57,32 +63,83 @@ export default function LoginPage() {
       provider: 'google',
       options: { redirectTo: getRedirectUrl() },
     });
-    // OAuth handles the redirect, no local setLoading(false) needed unless it fails immediately
+  }
+
+  async function handleEarlySignup(e: React.FormEvent) {
+    e.preventDefault();
+    setJoining(true);
+    setEarlyError(null);
+    setEarlySuccess(null);
+
+    try {
+      const response = await fetch('/api/landing-signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: earlyEmail }),
+      });
+      const body = (await response.json()) as { ok: boolean; error?: string; message?: string };
+      if (!response.ok || !body.ok) {
+        setEarlyError(body.error ?? 'Could not join the list. Try again.');
+      } else {
+        setEarlySuccess(body.message ?? 'You are in. We will notify you soon.');
+        setEarlyEmail('');
+      }
+    } catch {
+      setEarlyError('Could not join the list. Try again.');
+    } finally {
+      setJoining(false);
+    }
   }
 
   return (
     <div className="auth-page">
-      {/* Logo */}
+      <div className="card" style={{ marginBottom: 16, width: '100%', maxWidth: 420 }}>
+        <h2 style={{ fontSize: 22, marginBottom: 8 }}>Train harder. Track smarter.</h2>
+        <p style={{ color: 'var(--text2)', marginBottom: 12 }}>
+          Join early access and get launch updates before public release.
+        </p>
+        <form onSubmit={handleEarlySignup}>
+          <div className="auth-field">
+            <input
+              type="email"
+              className="auth-input"
+              placeholder="you@example.com"
+              value={earlyEmail}
+              onChange={e => setEarlyEmail(e.target.value)}
+              required
+              autoComplete="email"
+            />
+          </div>
+          {earlyError && <div className="auth-error"><p>{earlyError}</p></div>}
+          {earlySuccess && <div className="auth-success"><p>{earlySuccess}</p></div>}
+          <button type="submit" className="btn-primary" disabled={joining}>
+            {joining ? 'Joining...' : 'Join Early Access'}
+          </button>
+        </form>
+      </div>
+
       <div className="auth-logo">
-        <div className="auth-ghost">👻</div>
+        <div className="auth-ghost">Ghost</div>
         <h1 className="auth-title">GHOSTFIT</h1>
         <p className="auth-sub">Beat your past self</p>
       </div>
 
-      {/* Tab switcher */}
       <div className="auth-tabs">
         {(['login', 'signup'] as const).map(m => (
           <button
             key={m}
             className={`auth-tab ${mode === m ? 'active' : ''}`}
-            onClick={() => { setMode(m); setError(null); setSuccessMsg(null); }}
+            onClick={() => {
+              setMode(m);
+              setError(null);
+              setSuccessMsg(null);
+            }}
           >
             {m === 'login' ? 'Sign In' : 'Sign Up'}
           </button>
         ))}
       </div>
 
-      {/* Form */}
       <form className="auth-form" onSubmit={handleSubmit}>
         <div className="auth-field">
           <label className="auth-label">Email</label>
@@ -123,29 +180,22 @@ export default function LoginPage() {
           </div>
         )}
 
-        <button
-          type="submit"
-          className="btn-primary"
-          disabled={loading}
-          style={{ marginTop: 4 }}
-        >
-          {loading ? '…' : mode === 'login' ? 'Sign In' : 'Create Account'}
+        <button type="submit" className="btn-primary" disabled={loading} style={{ marginTop: 4 }}>
+          {loading ? '...' : mode === 'login' ? 'Sign In' : 'Create Account'}
         </button>
 
         {mode === 'login' && (
-          <button
-            type="button"
-            className="auth-forgot"
-            onClick={handleForgotPassword}
-          >
+          <button type="button" className="auth-forgot" onClick={handleForgotPassword}>
             Forgot password?
           </button>
         )}
+
+        <button type="button" className="btn-secondary" onClick={handleGoogleLogin} disabled={loading} style={{ marginTop: 8 }}>
+          Continue with Google
+        </button>
       </form>
 
-      <p className="auth-footer">
-        Your data syncs across all your devices once you sign in.
-      </p>
+      <p className="auth-footer">Your data syncs across all your devices once you sign in.</p>
     </div>
   );
 }

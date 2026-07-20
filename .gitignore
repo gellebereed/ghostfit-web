@@ -33,5 +33,5 @@ yarn-debug.log*
 .cache/
 .parcel-cache/
 
-.intentaudit/config.json
+.intentaudit/
 .intent

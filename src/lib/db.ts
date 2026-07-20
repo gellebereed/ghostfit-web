@@ -68,6 +68,11 @@ export async function getProfile(): Promise<UserProfile | null> {
     weight_kg: data.weight_kg ?? 75,
     current_streak: data.current_streak ?? 0,
 
+    // Psychology engine
+    streakShields: data.streak_shields ?? 0,
+    shieldedDates: data.shielded_dates ?? [],
+    commitmentTime: data.commitment_time ?? null,
+
     // New Avatar fields
     characterStyle: data.character_style,
     auraColor: data.aura_color,
@@ -102,6 +107,7 @@ export async function saveProfile(profile: UserProfile): Promise<void> {
       onboarding_complete: profile.onboardingComplete,
       weight_kg: profile.weight_kg,
       current_streak: profile.current_streak,
+      commitment_time: profile.commitmentTime ?? null,
       character_style: profile.characterStyle,
       aura_color: profile.auraColor,
       character_name: profile.characterName,
@@ -127,34 +133,94 @@ export async function updateStreak(
   userId: string,
   result: 'win' | 'loss' | 'incomplete'
 ): Promise<number> {
+  const { streak } = await updateStreakWithShield(result);
+  void userId; // kept for signature compatibility
+  return streak;
+}
+
+/**
+ * Like updateStreak, but a Streak Shield absorbs a loss: the streak survives,
+ * one shield is consumed, and the day is recorded so computed streaks agree.
+ */
+export async function updateStreakWithShield(
+  result: 'win' | 'loss' | 'incomplete'
+): Promise<{ streak: number; shieldUsed: boolean }> {
   const profile = await getProfile();
-  if (!profile) return 0;
-  
+  const realUserId = await uid();
+  if (!profile || !realUserId) return { streak: 0, shieldUsed: false };
+
   const currentStreak = profile.current_streak ?? 0;
-  let newStreak: number;
-  
+  const shields = profile.streakShields ?? 0;
+  let newStreak = currentStreak;
+  let shieldUsed = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updates: Record<string, any> = {};
+
   if (result === 'win') {
     newStreak = currentStreak + 1;
   } else if (result === 'loss') {
-    newStreak = 0; // RESET — ghost won, streak breaks
-  } else {
-    // incomplete — don't change streak
-    newStreak = currentStreak;
+    if (shields > 0 && currentStreak > 0) {
+      // Shield absorbs the loss
+      shieldUsed = true;
+      const shieldedDates = [...(profile.shieldedDates ?? []), new Date().toDateString()];
+      updates.streak_shields = shields - 1;
+      updates.shielded_dates = shieldedDates;
+      profile.streakShields = shields - 1;
+      profile.shieldedDates = shieldedDates;
+    } else {
+      newStreak = 0; // RESET — ghost won, streak breaks
+    }
   }
-  
-  await supabase
-    .from('profiles')
-    .update({ current_streak: newStreak })
-    .eq('id', userId);
-  
+  // incomplete — don't change streak
+
+  updates.current_streak = newStreak;
+  await supabase.from('profiles').update(updates).eq('id', realUserId);
+
   // Update local cache
   if (memoryCache.profile) {
     memoryCache.profile.current_streak = newStreak;
+    memoryCache.profile.streakShields = profile.streakShields;
+    memoryCache.profile.shieldedDates = profile.shieldedDates;
     localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(memoryCache.profile));
   }
   memoryCache.streak = newStreak;
-  
-  return newStreak;
+
+  return { streak: newStreak, shieldUsed };
+}
+
+export const STREAK_SHIELD_COST = 150;
+export const STREAK_SHIELD_MAX = 2;
+
+export async function buyStreakShield(): Promise<string | null> {
+  const profile = await getProfile();
+  const userId = await uid();
+  if (!profile || !userId) return 'Not signed in';
+  if ((profile.streakShields ?? 0) >= STREAK_SHIELD_MAX) return `You can hold at most ${STREAK_SHIELD_MAX} shields`;
+  if ((profile.soulCoins ?? 0) < STREAK_SHIELD_COST) return `Not enough Soul Coins (need ${STREAK_SHIELD_COST})`;
+
+  const newCount = (profile.streakShields ?? 0) + 1;
+  const { error } = await supabase
+    .from('profiles')
+    .update({ streak_shields: newCount })
+    .eq('id', userId);
+  if (error) return error.message;
+  await supabase.rpc('add_soul_coins', { user_id: userId, amount: -STREAK_SHIELD_COST });
+
+  if (memoryCache.profile) {
+    memoryCache.profile.streakShields = newCount;
+    memoryCache.profile.soulCoins = (memoryCache.profile.soulCoins ?? 0) - STREAK_SHIELD_COST;
+    localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(memoryCache.profile));
+  }
+  return null;
+}
+
+/** Days since the most recent logged session (any result). null = never trained. */
+export async function getDaysSinceLastWorkout(): Promise<number | null> {
+  const sessions = await getAllSessions();
+  if (sessions.length === 0) return null;
+  const latest = Math.max(...sessions.map(s => s.date));
+  const ms = Date.now() - latest;
+  return Math.floor(ms / 86400000);
 }
 
 // ─── Workout Plans ────────────────────────────────────────────────────────────
@@ -323,6 +389,10 @@ export async function getStreak(): Promise<number> {
   const sessions = await getAllSessions();
   if (sessions.length === 0 && cached) return parseInt(cached);
 
+  // Shielded loss-days count as survived, not broken
+  const profile = await getProfile();
+  const shielded = new Set(profile?.shieldedDates ?? []);
+
   let streak = 0;
   const byDate = new Map<string, GhostSession[]>();
   sessions.forEach(s => {
@@ -335,6 +405,7 @@ export async function getStreak(): Promise<number> {
   );
   for (const d of dates) {
     if (byDate.get(d)!.some(s => s.result === 'win')) streak++;
+    else if (shielded.has(d)) continue; // shield absorbed this day — streak survives
     else break;
   }
   
@@ -485,4 +556,17 @@ export async function awardSoulCoins(
   }
 
   return coins;
+}
+
+/** Grant an arbitrary coin amount (mystery chests, challenge payouts). */
+export async function grantCoins(amount: number): Promise<void> {
+  const userId = await uid();
+  if (!userId || amount === 0) return;
+
+  await supabase.rpc('add_soul_coins', { user_id: userId, amount });
+
+  if (memoryCache.profile) {
+    memoryCache.profile.soulCoins = Math.max(0, (memoryCache.profile.soulCoins || 0) + amount);
+    localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(memoryCache.profile));
+  }
 }

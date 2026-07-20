@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { COSMETICS, Cosmetic } from '@/data/cosmetics';
-import { getProfile } from '@/lib/db';
+import { getProfile, buyStreakShield, STREAK_SHIELD_COST, STREAK_SHIELD_MAX } from '@/lib/db';
 import { arcadeSounds } from '@/utils/arcadeSounds';
 
 export default function ShopScreen() {
@@ -12,6 +12,7 @@ export default function ShopScreen() {
   const [unlockedCosmetics, setUnlockedCosmetics] = useState<string[]>([]);
   const [activeFilter, setActiveFilter] = useState('all');
   const [purchaseFlash, setPurchaseFlash] = useState<string | null>(null);
+  const [shields, setShields] = useState(0);
 
   useEffect(() => {
     load();
@@ -22,6 +23,19 @@ export default function ShopScreen() {
     if (profile) {
       setSoulCoins(profile.soulCoins || 0);
       setUnlockedCosmetics(profile.unlockedCosmetics || []);
+      setShields(profile.streakShields ?? 0);
+    }
+  }
+
+  async function handleBuyShield() {
+    const err = await buyStreakShield();
+    if (err) { setPurchaseFlash(null); return; }
+    setShields(s => s + 1);
+    setSoulCoins(c => c - STREAK_SHIELD_COST);
+    setPurchaseFlash('Streak Shield 🛡️');
+    setTimeout(() => setPurchaseFlash(null), 2000);
+    if (localStorage.getItem('ghostfit_sound_enabled') !== 'false') {
+      arcadeSounds.purchased();
     }
   }
 
@@ -97,6 +111,26 @@ export default function ShopScreen() {
           Unlocked {purchaseFlash}! 🎉
         </div>
       )}
+
+      {/* Consumables — Streak Shield */}
+      <div className="shield-card">
+        <div className="shield-icon">🛡️</div>
+        <div className="shield-info">
+          <p className="shop-item-name">Streak Shield</p>
+          <p className="shop-item-desc">
+            If the ghost beats you, a shield breaks instead of your streak. Auto-used. Hold up to {STREAK_SHIELD_MAX}.
+          </p>
+          <p className="shield-owned">{shields}/{STREAK_SHIELD_MAX} owned</p>
+        </div>
+        <button
+          onPointerDown={handleBuyShield}
+          disabled={shields >= STREAK_SHIELD_MAX || soulCoins < STREAK_SHIELD_COST}
+          className={`shop-buy-btn ${shields >= STREAK_SHIELD_MAX ? 'equipped' : soulCoins >= STREAK_SHIELD_COST ? 'available' : 'disabled'}`}
+          style={{ width: 'auto', padding: '10px 14px' }}
+        >
+          {shields >= STREAK_SHIELD_MAX ? 'MAX' : `⚡ ${STREAK_SHIELD_COST}`}
+        </button>
+      </div>
 
       {/* Filter tabs */}
       <div className="shop-filter-scroll">

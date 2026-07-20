@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import InstallPrompt from "@/components/InstallPrompt";
+import AuraTheme from "@/components/AuraTheme";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <div className="app">
+          <AuraTheme />
           {children}
           <InstallPrompt />
         </div>

@@ -2,7 +2,10 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getCurrentPlan, getAllSessions, updateStreak, awardSoulCoins } from '@/lib/db';
+import { getCurrentPlan, getAllSessions, updateStreakWithShield, awardSoulCoins, grantCoins, getWinCount } from '@/lib/db';
+import { rollChest, ChestDrop } from '@/lib/chest';
+import { calculateTier, getTierLabel } from '@/lib/types';
+import { getFocusTheme } from '@/lib/theme';
 import { WorkoutDay, GhostSession } from '@/lib/types';
 import { useAppStore } from '@/store/appStore';
 import PostWorkoutRecap from '@/components/PostWorkoutRecap';
@@ -27,17 +30,6 @@ function formatExerciseDetail(exercise: any): string {
   return `${sets} × ${reps} reps`;
 }
 
-const WORKOUT_FOCUS_IMAGES: Record<string, string> = {
-  'Upper Body': 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Bench_Press_-_Medium_Grip/0.jpg',
-  'Lower Body': 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Full_Squat/0.jpg',
-  'Push':       'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Bench_Press_-_Medium_Grip/0.jpg',
-  'Pull':       'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Curl/0.jpg',
-  'Legs':       'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Full_Squat/0.jpg',
-  'Core':       'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Ab_Crunch_Machine/0.jpg',
-  'Cardio':     'https://images.unsplash.com/photo-1538805060514-97d9cc17730c?auto=format&fit=crop&w=400&q=80',
-  'Full Body':  'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Deadlift/0.jpg',
-};
-
 export default function WorkoutPage() {
   const router = useRouter();
   const { profile, refreshProfile } = useAppStore();
@@ -46,14 +38,17 @@ export default function WorkoutPage() {
   const [exerciseSessions, setExerciseSessions] = useState<GhostSession[]>([]);
   const [ready, setReady] = useState(false);
   const [showRecap, setShowRecap] = useState(false);
-  const [recapData, setRecapData] = useState<{ 
+  const [recapData, setRecapData] = useState<{
     workoutResult: 'win' | 'loss';
-    totalReps: number; 
-    totalSets: number; 
-    exWon: number; 
-    streak: number; 
+    totalReps: number;
+    totalSets: number;
+    exWon: number;
+    streak: number;
     totalEx: number;
     duration: number;
+    chest: ChestDrop;
+    tierLabel: string;
+    shieldUsed: boolean;
   } | null>(null);
 
   useEffect(() => { 
@@ -94,21 +89,29 @@ export default function WorkoutPage() {
     const totalEx = td.exercises.length;
     const workoutResult = exWon > totalEx / 2 ? 'win' : 'loss';
     
-    const streak = await updateStreak(profile.characterName || 'YOU', workoutResult);
+    const { streak, shieldUsed } = await updateStreakWithShield(workoutResult);
     await awardSoulCoins(workoutResult, 0);
-    
+
+    // Variable reward: chest is rolled & banked now (refresh-safe), revealed in the recap
+    const chest = rollChest(workoutResult);
+    await grantCoins(chest.coins);
+    const tierLabel = getTierLabel(calculateTier(await getWinCount()));
+
     const totalReps = sessions.reduce((a, s) => a + s.totalReps, 0);
     const totalSets = sessions.reduce((a, s) => a + s.setsCompleted, 0);
     const duration = sessions.reduce((a, s) => a + (s.totalDuration || 0), 0) + (totalSets * 90);
 
-    setRecapData({ 
+    setRecapData({
       workoutResult,
-      totalReps, 
-      totalSets, 
-      exWon, 
+      totalReps,
+      totalSets,
+      exWon,
       streak,
       totalEx,
-      duration
+      duration,
+      chest,
+      tierLabel,
+      shieldUsed
     });
     setShowRecap(true);
   }
@@ -124,7 +127,7 @@ export default function WorkoutPage() {
   const done = today.exercises.filter(ex => completed.has(ex.name)).length;
   const total = today.exercises.length;
   const allDone = done === total;
-  const heroImg = WORKOUT_FOCUS_IMAGES[today.focus] ?? WORKOUT_FOCUS_IMAGES['Full Body'];
+  const focusTheme = getFocusTheme(today.focus);
 
   return (
     <div>
@@ -145,6 +148,9 @@ export default function WorkoutPage() {
           exercisesWon={recapData.exWon}
           totalExercises={recapData.totalEx}
           durationSeconds={recapData.duration}
+          chest={recapData.chest}
+          tierLabel={recapData.tierLabel}
+          shieldUsed={recapData.shieldUsed}
           onContinue={() => {
             setShowRecap(false);
             router.push('/');
@@ -153,7 +159,12 @@ export default function WorkoutPage() {
       )}
 
       <div className="wk-hero">
-        <img src={heroImg} alt={today.focus} className="wk-hero-img" />
+        <div
+          className="wk-hero-img focus-hero"
+          style={{ background: `linear-gradient(135deg, ${focusTheme.from}, ${focusTheme.to})` }}
+        >
+          <span className="focus-hero-emoji" style={{ fontSize: 96 }}>{focusTheme.emoji}</span>
+        </div>
         <div className="wk-hero-gradient" />
         <button className="wk-hero-back" onClick={() => router.push('/')}>←</button>
         <div className={`wk-hero-pill ${allDone ? 'done' : ''}`}>
