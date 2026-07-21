@@ -6,7 +6,7 @@
  * Callers (pages) require zero changes.
  */
 import { supabase } from './supabase';
-import { WorkoutPlan, GhostSession, UserProfile, ExerciseInfo } from './types';
+import { WorkoutPlan, WorkoutDay, GhostSession, UserProfile, ExerciseInfo } from './types';
 import { sanitizeExercise } from '../services/openai';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -265,9 +265,9 @@ export async function getCurrentPlan(): Promise<WorkoutPlan | null> {
 
   if (error || !data) return cached ? JSON.parse(cached) : null;
   
-  const rawPlan = {
+  const rawPlan: WorkoutPlan = {
     weekNumber: data.week_number,
-    days: data.days,
+    days: Array.isArray(data.days) ? data.days as WorkoutDay[] : [],
     createdAt: new Date(data.created_at).getTime(),
   };
 
@@ -276,9 +276,9 @@ export async function getCurrentPlan(): Promise<WorkoutPlan | null> {
   const userEquipment = profile?.equipment ?? [];
   const plan: WorkoutPlan = {
     ...rawPlan,
-    days: rawPlan.days.map((day: any) => ({
+    days: rawPlan.days.map(day => ({
       ...day,
-      exercises: day.exercises.map((ex: any) =>
+      exercises: day.exercises.map(ex =>
         ex.metricType ? ex : sanitizeExercise(ex, userEquipment)
       )
     }))

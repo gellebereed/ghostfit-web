@@ -29,6 +29,19 @@ const dayNames = [
   'Thursday', 'Friday', 'Saturday'
 ];
 
+type EditableExercise = Exercise & { id?: string };
+interface ExerciseSuggestion {
+  name: string;
+  type?: Exercise['type'];
+  equipmentNeeded?: string;
+  isEquipmentOwned?: boolean;
+  reason?: string;
+}
+
+function exerciseId(exercise: Exercise, dayIdx: number, exIdx: number): string {
+  return (exercise as EditableExercise).id || `${exercise.name}-${dayIdx}-${exIdx}`;
+}
+
 function formatExerciseDetail(exercise: Exercise): string {
   if (exercise.metricType === 'duration') {
     const secs = exercise.durationSeconds ?? 30;
@@ -62,7 +75,7 @@ function SortableExerciseRow({
   exIdx: number, 
   editing: boolean, 
   onDelete: (idx: number) => void, 
-  onUpdate: (idx: number, field: keyof Exercise, val: any) => void 
+  onUpdate: (idx: number, field: keyof Exercise, val: Exercise[keyof Exercise]) => void
 }) {
   const itemId = exercise.id || `${exercise.name}-${dayIdx}-${exIdx}`;
   
@@ -162,7 +175,7 @@ export default function PlanPage() {
   // AI state
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiSuggestions, setAiSuggestions] = useState<any[]>([]);
+  const [aiSuggestions, setAiSuggestions] = useState<ExerciseSuggestion[]>([]);
 
   // Move Day state
   const [movingDay, setMovingDay] = useState<number | null>(null);
@@ -247,7 +260,7 @@ export default function PlanPage() {
     }
   }
 
-  function updateExercise(dayIdx: number, exIdx: number, field: keyof Exercise, value: any) {
+  function updateExercise(dayIdx: number, exIdx: number, field: keyof Exercise, value: Exercise[keyof Exercise]) {
     if (!plan) return;
     const newPlan = { ...plan, days: plan.days.map((d, di) => di !== dayIdx ? d : {
       ...d, exercises: d.exercises.map((ex, ei) => ei !== exIdx ? ex : { ...ex, [field]: value })
@@ -263,21 +276,24 @@ export default function PlanPage() {
     setPlan(newPlan);
   }
 
-  function addExercise(dayIdx: number, item: any) {
+  function addExercise(dayIdx: number, item: string | ExerciseSuggestion) {
     if (!plan) return;
     const name = typeof item === 'string' ? item : item.name;
-    const type = typeof item === 'string' ? (item.match(/treadmill|bike|row|run|walk|elliptical|rope/i) ? 'cardio' : 'strength') : item.type;
+    const type: Exercise['type'] = typeof item === 'string'
+      ? (item.match(/treadmill|bike|row|run|walk|elliptical|rope/i) ? 'cardio' : 'strength')
+      : item.type ?? 'strength';
 
+    const newExercise: Exercise = {
+      name,
+      sets: type === 'cardio' ? 1 : 3,
+      reps: type === 'cardio' ? 1 : 10,
+      durationSeconds: type === 'cardio' ? 600 : null,
+      type,
+      metricType: type === 'cardio' ? 'cardio' : 'weight_reps',
+      equipment: typeof item === 'string' ? newExEquipment : item.equipmentNeeded || newExEquipment,
+    };
     const newPlan = { ...plan, days: plan.days.map((d, di) => di !== dayIdx ? d : {
-      ...d, exercises: [...d.exercises, {
-        name,
-        sets: type === 'cardio' ? 1 : 3,
-        reps: type === 'cardio' ? 1 : 10,
-        durationSeconds: type === 'cardio' ? 600 : 0,
-        type: type as any,
-        metricType: (type === 'cardio' ? 'cardio' : 'weight_reps') as any,
-        equipment: typeof item === 'string' ? newExEquipment : item.equipmentNeeded || newExEquipment
-      }]
+      ...d, exercises: [...d.exercises, newExercise]
     })};
     setPlan(newPlan);
     setShowAddSheet(false);
@@ -319,8 +335,8 @@ export default function PlanPage() {
     if (!plan || activeId === overId) return;
     
     const day = plan.days[dayIdx];
-    const oldIdx = day.exercises.findIndex((e, ei) => ( (e as any).id || `${e.name}-${dayIdx}-${ei}`) === activeId);
-    const newIdx = day.exercises.findIndex((e, ei) => ( (e as any).id || `${e.name}-${dayIdx}-${ei}`) === overId);
+    const oldIdx = day.exercises.findIndex((e, ei) => exerciseId(e, dayIdx, ei) === activeId);
+    const newIdx = day.exercises.findIndex((e, ei) => exerciseId(e, dayIdx, ei) === overId);
     
     if (oldIdx !== -1 && newIdx !== -1) {
       const newPlan = { ...plan, days: plan.days.map((d, di) => di !== dayIdx ? d : {
@@ -507,12 +523,12 @@ export default function PlanPage() {
               }}
             >
               <SortableContext
-                items={day.exercises.map((e, ei) => (e as any).id || `${e.name}-${di}-${ei}`)}
+                items={day.exercises.map((e, ei) => exerciseId(e, di, ei))}
                 strategy={verticalListSortingStrategy}
               >
                 {day.exercises.map((exercise, ei) => (
                   <SortableExerciseRow
-                    key={(exercise as any).id || `${exercise.name}-${di}-${ei}`}
+                    key={exerciseId(exercise, di, ei)}
                     exercise={exercise}
                     dayIdx={di}
                     exIdx={ei}

@@ -1,35 +1,41 @@
 'use client';
 import { useEffect, useState } from 'react';
 
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+interface NavigatorWithStandalone extends Navigator {
+  standalone?: boolean;
+}
+
 export default function InstallPrompt() {
   const [isReady, setIsReady] = useState(false);
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(true); // default true so we don't flash
   const [showPWABanner, setShowPWABanner] = useState(false);
 
   useEffect(() => {
-    setIsReady(true);
-    
-    // Check if we are already installed/standalone
-    const standalone = window.matchMedia('(display-mode: standalone)').matches
-      || (window.navigator as any).standalone === true;
-    setIsStandalone(standalone);
-
-    // Detect iOS
-    const userAgent = window.navigator.userAgent.toLowerCase();
-    const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
-    setIsIOS(isIosDevice);
+    const readinessTimer = window.setTimeout(() => {
+      const standalone = window.matchMedia('(display-mode: standalone)').matches
+        || (window.navigator as NavigatorWithStandalone).standalone === true;
+      setIsStandalone(standalone);
+      setIsIOS(/iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase()));
+      setIsReady(true);
+    }, 0);
 
     // Listen for Chrome/Android install prompt
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e);
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
     };
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.clearTimeout(readinessTimer);
     };
   }, []);
 

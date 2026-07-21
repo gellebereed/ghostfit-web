@@ -11,6 +11,26 @@ import { playSetComplete, playGhostBeaten, playGiveUp, playMilestone, hapticSetC
 import { arcadeSounds, initAudio } from '@/utils/arcadeSounds';
 import Celebration from '@/components/Celebration';
 
+interface SetEntry {
+  reps?: number;
+  weight?: number;
+  duration?: number;
+}
+
+interface InitiationGhost {
+  totalReps: number;
+  avgWeight: number;
+  totalDuration: number;
+  isInitiation: true;
+}
+
+type GhostOpponent = GhostSession | InitiationGhost;
+type Benchmark = { reps: number; weight: number; duration: number };
+
+function isInitiationGhost(ghost: GhostOpponent | null): ghost is InitiationGhost {
+  return ghost !== null && 'isInitiation' in ghost;
+}
+
 function ComboAnnouncer({ combo }: { combo: number | null }) {
   if (!combo || combo < 2) return null;
   const text = combo === 2 ? 'COMBO x2!' : combo === 3 ? 'COMBO x3! 🔥' : 'UNSTOPPABLE! ⚡';
@@ -27,7 +47,7 @@ function getInitiationBenchmark(
   exerciseType: 'strength' | 'cardio',
   goal: string
 ): { reps: number; weight: number; duration: number } {
-  const benchmarks: Record<string, any> = {
+  const benchmarks: Record<string, Record<'strength' | 'cardio', Benchmark>> = {
     'Get Shredded': { strength: { reps: 12, weight: 15, duration: 0 }, cardio: { reps: 0, weight: 0, duration: 20 * 60 } },
     'Build Muscle': { strength: { reps: 10, weight: 20, duration: 0 }, cardio: { reps: 0, weight: 0, duration: 15 * 60 } },
     'Get Stronger': { strength: { reps: 6, weight: 30, duration: 0 }, cardio: { reps: 0, weight: 0, duration: 10 * 60 } },
@@ -78,7 +98,7 @@ function ExerciseContent() {
   const idx = parseInt(params.get('idx') || '0');
 
   const [exercise, setExercise] = useState<Exercise | null>(null);
-  const [ghost, setGhost] = useState<GhostSession | null>(null);
+  const [ghost, setGhost] = useState<GhostOpponent | null>(null);
   const [tier, setTier] = useState(1);
 
   // Strength state
@@ -88,7 +108,7 @@ function ExerciseContent() {
   const [totalReps, setTotalReps] = useState(0);
   const [weights, setWeights] = useState<number[]>([]);
   const [setsCompleted, setSetsCompleted] = useState(0);
-  const [setLog, setSetLog] = useState<Array<{ reps?: number; weight?: number; duration?: number }>>([]);
+  const [setLog, setSetLog] = useState<SetEntry[]>([]);
 
   // Cardio state
   const [seconds, setSeconds] = useState(0);
@@ -144,16 +164,6 @@ function ExerciseContent() {
   // Video fallback state
   const [videoBlocked, setVideoBlocked] = useState(false);
 
-  useEffect(() => {
-    document.addEventListener('pointerdown', initAudio, { once: true });
-    setSoundEnabled(localStorage.getItem('ghostfit_sound_enabled') !== 'false');
-    refreshProfile().then(load);
-    return () => { 
-      if (timerRef.current) clearInterval(timerRef.current);
-      if (restIntervalRef.current) clearInterval(restIntervalRef.current);
-    };
-  }, [refreshProfile]);
-
   async function load() {
     try {
       const plan = await getCurrentPlan();
@@ -164,7 +174,7 @@ function ExerciseContent() {
       const ex = td.exercises[idx];
       setExercise(ex);
 
-      let g = await getGhostForExercise(ex.name);
+      let g: GhostOpponent | null = await getGhostForExercise(ex.name);
       if (!g) {
         const profile = await getProfile();
         const goal = profile?.goal || 'Get Shredded';
@@ -175,7 +185,7 @@ function ExerciseContent() {
           avgWeight: benchmark.weight,
           totalDuration: benchmark.duration,
           isInitiation: true
-        } as any;
+        };
       }
       setGhost(g);
       const profile = await getProfile();
@@ -244,7 +254,20 @@ function ExerciseContent() {
     setVideoLoading(false);
   }
 
-  function addSetToSession(data: any) {
+  useEffect(() => {
+    document.addEventListener('pointerdown', initAudio, { once: true });
+    const timer = window.setTimeout(() => {
+      setSoundEnabled(localStorage.getItem('ghostfit_sound_enabled') !== 'false');
+      void refreshProfile().then(load);
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (restIntervalRef.current) clearInterval(restIntervalRef.current);
+    };
+  }, [refreshProfile]);
+
+  function addSetToSession(data: SetEntry) {
     const r = data.reps || 0;
     const w = data.weight || 0;
     const d = data.duration || 0;
@@ -287,7 +310,7 @@ function ExerciseContent() {
     }
   }
 
-  function handleSetComplete(data: any) {
+  function handleSetComplete(data: SetEntry) {
     addSetToSession(data);
 
     if (currentSet >= (exercise?.sets || 3)) {
@@ -405,7 +428,7 @@ function ExerciseContent() {
     }
 
     setResult(res);
-  }, [exercise, ghost, seconds, tier, weights]);
+  }, [exercise, ghost, seconds, soundEnabled, tier, weights]);
 
   async function handleGiveUp() {
     if (!exercise) return;
@@ -540,7 +563,7 @@ function ExerciseContent() {
             <div className="hb-col">
               <div className="hb-labels">
                 <span className="hb-ghost-info">{ghost ? (isCardio ? formatTime(ghostTarget) : `${ghostTarget} target`) : 'NO DATA'}</span>
-                <span className="hb-name ghost-name">{(ghost as any)?.isInitiation ? 'DAY 1 TARGET' : (profile?.ghostName ?? 'GHOST')}</span>
+                <span className="hb-name ghost-name">{isInitiationGhost(ghost) ? 'DAY 1 TARGET' : (profile?.ghostName ?? 'GHOST')}</span>
               </div>
               <div className="hb-track">
                 <div className="hb-fill ghost-fill" style={{ width: ghost ? '100%' : '0%' }} />
@@ -573,7 +596,7 @@ function ExerciseContent() {
             <div className="fighter-center">
               {myScore === 0 && ghostTarget === 0 ? (
                 <div className="fc-dots"><div className="fc-dot" /><div className="fc-dot" /><div className="fc-dot" /></div>
-              ) : (ghost as any)?.isInitiation && myScore === 0 ? (
+              ) : isInitiationGhost(ghost) && myScore === 0 ? (
                 <div className="fc-status-behind">
                   <span className="fc-status-text yellow" style={{fontSize: 9}}>SET YOUR BENCHMARK 🎯</span>
                 </div>
@@ -606,7 +629,7 @@ function ExerciseContent() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}>
                 <Avatar type="ghost" size={72} animationState={ahead ? 'losing' : 'idle'} />
-                {ahead && !(ghost as any)?.isInitiation && <div className="fc-defeated">💀</div>}
+                {ahead && !isInitiationGhost(ghost) && <div className="fc-defeated">💀</div>}
               </div>
               <div className="fc-label ghost-label">{profile?.ghostName ?? 'GHOST'}</div>
             </div>

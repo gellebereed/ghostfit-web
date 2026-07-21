@@ -110,6 +110,22 @@ export default function NutritionOnboardingPage() {
     }
   }
 
+  async function useSmartDefaults() {
+    setCatalogError(null);
+    try {
+      const foods = catalog ?? await getFoodCatalog(countryCode, countryName);
+      setCatalog(foods);
+      const safeDefaults = foods
+        .filter(food => !restrictions.some(rule => food.name.toLowerCase().includes(rule.replace('No ', '').toLowerCase())))
+        .slice(0, 12);
+      setPrefs(Object.fromEntries(safeDefaults.map(food => [food.id, 'like' as FoodPreference])));
+      setStep(3);
+    } catch (error) {
+      setCatalogError(error instanceof Error ? error.message : 'Could not prepare smart defaults');
+      setStep(2);
+    }
+  }
+
   function cyclePref(id: string) {
     setPrefs(prev => {
       const current = prev[id] ?? 'none';
@@ -211,7 +227,12 @@ export default function NutritionOnboardingPage() {
       {step === 0 && (
         <div className="nutri-step">
           <h2 className="nutri-title">Let&apos;s get to know you</h2>
-          <p className="nutri-sub">Your meal plan is built from your body, your goal, and your country&apos;s food.</p>
+          <p className="nutri-sub">Your workout goal and weight are already synced. Add only the details needed to calculate nutrition accurately.</p>
+
+          <div className="onb-guarantee" style={{ marginBottom: 20 }}>
+            <span>✓</span>
+            <p><strong>Fighter profile connected</strong><br />Goal: {profile?.goal || 'fitness'} · Weight: {weightKg} kg. Change these later from your profile.</p>
+          </div>
 
           <p className="sheet-label">WHERE DO YOU LIVE?</p>
           <select className="nutri-select" value={countryCode} onChange={e => setCountryCode(e.target.value)}>
@@ -275,7 +296,8 @@ export default function NutritionOnboardingPage() {
             <button className={`sheet-opt ${mealsPerDay === 4 ? 'active' : ''}`} onClick={() => setMealsPerDay(4)}>3 meals + snack</button>
           </div>
 
-          <button className="btn-primary" style={{ marginTop: 24 }} onClick={loadCatalog}>SHOW ME MY FOODS →</button>
+          <button className="btn-primary" style={{ marginTop: 24 }} onClick={loadCatalog}>CHOOSE MY FOODS →</button>
+          <button className="btn-ghost nutri-smart-default" onClick={useSmartDefaults}>Use smart defaults and review my targets</button>
         </div>
       )}
 

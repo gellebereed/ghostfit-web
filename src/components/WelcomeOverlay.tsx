@@ -23,7 +23,7 @@ export default function WelcomeOverlay({
   const [fadeOut, setFadeOut] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    const timer = window.setTimeout(() => {
       const welcomed = sessionStorage.getItem('ghostfit_session_welcomed');
       if (!welcomed) {
         setShow(true);
@@ -34,7 +34,8 @@ export default function WelcomeOverlay({
           console.warn('Welcome chime playback blocked or failed:', e);
         }
       }
-    }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   if (!show) return null;

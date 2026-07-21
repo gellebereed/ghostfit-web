@@ -30,10 +30,6 @@ export default function SettingsPage() {
   const [commitmentTime, setCommitmentTime] = useState('');
   const [theme, setTheme] = useState('shadow');
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
   async function loadData() {
     const profile = await getProfile();
     if (profile) {
@@ -48,6 +44,11 @@ export default function SettingsPage() {
     setTheme(getSavedTheme());
   }
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadData(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   function changeTheme(id: string) {
     setTheme(id);
     applyBaseTheme(id);
@@ -56,12 +57,12 @@ export default function SettingsPage() {
   function toggleSound() {
     const v = !soundOn;
     setSoundOn(v);
-    saveSettings({ soundEnabled: v, hapticEnabled: hapticOn } as any);
+    saveSettings({ soundEnabled: v, hapticEnabled: hapticOn });
   }
   function toggleHaptic() {
     const v = !hapticOn;
     setHapticOn(v);
-    saveSettings({ soundEnabled: soundOn, hapticEnabled: v } as any);
+    saveSettings({ soundEnabled: soundOn, hapticEnabled: v });
   }
   function toggleRestStretch() {
     const v = !restStretch;

@@ -23,6 +23,34 @@ interface SmartLoggerProps {
   defaultReps?: number;            // prefill: plan target reps
 }
 
+interface RestAwareLoggerProps {
+  onComplete: (data: SetData) => void;
+  isResting: boolean;
+  restSeconds: number;
+  onSkipRest: () => void;
+  currentSet: number;
+  totalSets: number;
+}
+
+interface WeightRepsLoggerProps extends RestAwareLoggerProps {
+  defaultWeight: number;
+  defaultReps: number;
+}
+
+interface RepsLoggerProps extends RestAwareLoggerProps {
+  defaultReps: number;
+}
+
+interface DurationLoggerProps extends RestAwareLoggerProps {
+  targetSeconds: number;
+}
+
+interface CardioLoggerProps {
+  targetSeconds: number;
+  ghostDuration: number;
+  onComplete: (data: SetData) => void;
+}
+
 // ─────────────────────────────────────────────────────────────
 // SET TRACKER — every set is a round of the fight
 // ─────────────────────────────────────────────────────────────
@@ -191,7 +219,7 @@ function CompleteSetButton({ onComplete }: { onComplete: () => void }) {
 // ─────────────────────────────────────────────────────────────
 
 function WeightRepsLogger({ onComplete, isResting, restSeconds,
-  onSkipRest, currentSet, totalSets, defaultWeight, defaultReps }: any) {
+  onSkipRest, currentSet, totalSets, defaultWeight, defaultReps }: WeightRepsLoggerProps) {
   // Prefilled from the ghost's last performance / plan target — log in one tap
   const [weight, setWeight] = useState<number>(defaultWeight || 0);
   const [reps, setReps] = useState<number>(defaultReps || 0);
@@ -260,7 +288,7 @@ function WeightRepsLogger({ onComplete, isResting, restSeconds,
 // ─────────────────────────────────────────────────────────────
 
 function BodyweightRepsLogger({ onComplete, isResting, restSeconds,
-  onSkipRest, currentSet, totalSets, defaultReps }: any) {
+  onSkipRest, currentSet, totalSets, defaultReps }: RepsLoggerProps) {
   const [reps, setReps] = useState<number>(defaultReps || 0);
 
   if (isResting) return (
@@ -302,7 +330,7 @@ function BodyweightRepsLogger({ onComplete, isResting, restSeconds,
 // ─────────────────────────────────────────────────────────────
 
 function RepsOnlyLogger({ onComplete, isResting, restSeconds,
-  onSkipRest, currentSet, totalSets, defaultReps }: any) {
+  onSkipRest, currentSet, totalSets, defaultReps }: RepsLoggerProps) {
   const [reps, setReps] = useState<number>(defaultReps || 0);
 
   if (isResting) return (
@@ -344,7 +372,7 @@ function RepsOnlyLogger({ onComplete, isResting, restSeconds,
 // ─────────────────────────────────────────────────────────────
 
 function DurationLogger({ targetSeconds, onComplete, isResting,
-  restSeconds, onSkipRest, currentSet, totalSets }: any) {
+  restSeconds, onSkipRest, currentSet, totalSets }: DurationLoggerProps) {
 
   const { elapsed, running, start, pause, stop, reset }
     = useWorkoutTimer();
@@ -424,7 +452,7 @@ function DurationLogger({ targetSeconds, onComplete, isResting,
 // Uses screen-lock-safe timer from useWorkoutTimer
 // ─────────────────────────────────────────────────────────────
 
-function CardioLogger({ targetSeconds, ghostDuration, onComplete }: any) {
+function CardioLogger({ targetSeconds, ghostDuration, onComplete }: CardioLoggerProps) {
 
   const { elapsed, running, start, pause, stop, format }
     = useWorkoutTimer();

@@ -14,10 +14,6 @@ export default function ShopScreen() {
   const [purchaseFlash, setPurchaseFlash] = useState<string | null>(null);
   const [shields, setShields] = useState(0);
 
-  useEffect(() => {
-    load();
-  }, []);
-
   async function load() {
     const profile = await getProfile();
     if (profile) {
@@ -26,6 +22,11 @@ export default function ShopScreen() {
       setShields(profile.streakShields ?? 0);
     }
   }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   async function handleBuyShield() {
     const err = await buyStreakShield();

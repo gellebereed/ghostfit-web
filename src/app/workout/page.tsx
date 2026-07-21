@@ -6,14 +6,14 @@ import { getCurrentPlan, getAllSessions, updateStreakWithShield, awardSoulCoins,
 import { rollChest, ChestDrop } from '@/lib/chest';
 import { calculateTier, getTierLabel } from '@/lib/types';
 import { getFocusTheme } from '@/lib/theme';
-import { WorkoutDay, GhostSession } from '@/lib/types';
+import { WorkoutDay, GhostSession, Exercise } from '@/lib/types';
 import { useAppStore } from '@/store/appStore';
 import PostWorkoutRecap from '@/components/PostWorkoutRecap';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-function formatExerciseDetail(exercise: any): string {
-  const m = exercise.metricType || (exercise.type === 'cardio' ? 'cardio' : (exercise.type === 'duration' ? 'duration' : 'weight_reps'));
+function formatExerciseDetail(exercise: Exercise): string {
+  const m = exercise.metricType || (exercise.type === 'cardio' ? 'cardio' : 'weight_reps');
   
   if (m === 'duration' || m === 'cardio') {
     const secs = exercise.durationSeconds ?? (m === 'cardio' ? 600 : 30);

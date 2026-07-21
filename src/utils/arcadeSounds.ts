@@ -1,7 +1,11 @@
 'use client';
 
+interface WindowWithWebkitAudio extends Window {
+  webkitAudioContext?: typeof AudioContext;
+}
+
 const ctx = typeof window !== 'undefined' 
-  ? new (window.AudioContext || (window as any).webkitAudioContext)() 
+  ? new (window.AudioContext || (window as WindowWithWebkitAudio).webkitAudioContext || AudioContext)()
   : null;
 
 function playTone(

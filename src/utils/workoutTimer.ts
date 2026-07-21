@@ -9,6 +9,8 @@ export function useWorkoutTimer() {
 
   function tick() {
     if (!startTimeRef.current) return;
+    // Reading wall-clock time is intentional: it keeps the timer accurate after screen lock.
+    // eslint-disable-next-line react-hooks/purity
     const e = Math.floor((Date.now() - startTimeRef.current) / 1000);
     setElapsed(e);
     rafRef.current = requestAnimationFrame(tick);

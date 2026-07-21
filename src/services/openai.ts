@@ -1,6 +1,6 @@
 // NOTE: legacy filename — plan generation now runs through the provider-
 // agnostic LLM layer (Gemini → Qwen → OpenAI) in services/llm.ts.
-import { WorkoutPlan } from '@/lib/types';
+import { Exercise, WorkoutPlan } from '@/lib/types';
 import { generateJSON } from './llm';
 
 const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -22,16 +22,17 @@ function getOrderedDays() {
 }
 
 export function sanitizeExercise(
-  ex: any,
+  ex: Partial<Exercise>,
   userEquipment: string[]
-): any {
+): Exercise {
+  const exerciseName = typeof ex.name === 'string' && ex.name.trim() ? ex.name.trim() : 'Foundation Exercise';
   // Fix missing/invalid equipment
-  let equipment = ex.equipment;
+  let equipment = typeof ex.equipment === 'string' ? ex.equipment : '';
   if (
     !equipment ||
     ['any', 'none', 'n/a', ''].includes(equipment.toLowerCase())
   ) {
-    const name = ex.name.toLowerCase();
+    const name = exerciseName.toLowerCase();
     const cardioEquipMap: Record<string, string> = {
       'treadmill': 'Treadmill', 'run': 'Treadmill', 'jog': 'Treadmill',
       'cycling': 'Spin Bike', 'bike': 'Spin Bike',
@@ -48,9 +49,9 @@ export function sanitizeExercise(
   }
 
   // Backfill metricType if AI forgot it (fallback only)
-  let metricType = ex.metricType;
+  let metricType: Exercise['metricType'] | undefined = ex.metricType;
   if (!metricType) {
-    const n = ex.name.toLowerCase();
+    const n = exerciseName.toLowerCase();
     if (ex.type === 'cardio' ||
         ['treadmill','rowing','cycling','bike','elliptical','skip','run','jog']
         .some(k => n.includes(k))) {
@@ -87,12 +88,13 @@ export function sanitizeExercise(
   }
 
   return {
-    ...ex,
+    name: exerciseName,
     equipment,
     metricType,
     reps,
     durationSeconds,
     sets: ex.sets && !isNaN(Number(ex.sets)) ? Number(ex.sets) : 3,
+    type: ex.type === 'cardio' || metricType === 'cardio' ? 'cardio' : 'strength',
   };
 }
 
@@ -106,8 +108,22 @@ export function sanitizePlan(plan: WorkoutPlan, userEquipment: string[]): Workou
   };
 }
 
-export async function generateWorkoutPlan(equipment: string[], goal: string, weekNumber: number = 1) {
+interface WorkoutPlanPreferences {
+  experience?: string;
+  trainingDays?: number;
+  sessionMinutes?: number;
+}
+
+export async function generateWorkoutPlan(
+  equipment: string[],
+  goal: string,
+  weekNumber: number = 1,
+  preferences: WorkoutPlanPreferences = {},
+) {
   const { todayName, orderedDays } = getOrderedDays();
+  const trainingDays = Math.max(3, Math.min(5, preferences.trainingDays ?? 3));
+  const sessionMinutes = Math.max(20, Math.min(90, preferences.sessionMinutes ?? 45));
+  const experience = preferences.experience ?? 'beginner';
 
   const prompt = `You are an expert fitness coach creating a personalized 
 7-day workout plan. Today is ${todayName}.
@@ -115,12 +131,20 @@ export async function generateWorkoutPlan(equipment: string[], goal: string, wee
 Equipment available: ${equipment.join(', ')}
 Fitness goal: ${goal}
 Week: ${weekNumber}
+Experience level: ${experience}
+Training days available: ${trainingDays} days this week
+Target session length: about ${sessionMinutes} minutes
 Starting day: ${todayName} (Day 1 of this plan)
 
 The plan MUST start from ${todayName} and follow this day order:
 ${orderedDays.map(d => `Day ${d.dayNumber}: ${d.dayName}`).join('\n')}
 
 INTELLIGENT PLANNING RULES:
+0. SCHEDULE FIT is non-negotiable:
+   - Create exactly ${trainingDays} workout days and ${7 - trainingDays} recovery days
+   - Keep each workout realistic for roughly ${sessionMinutes} minutes
+   - Match exercise complexity and volume to a ${experience} trainee
+
 1. REST DAY placement must be smart:
    - Never put rest on Day 1 (today — user is starting now)
    - Place rest day(s) after high-intensity days to allow recovery
@@ -239,13 +263,12 @@ Return ONLY valid JSON, no markdown, no explanation:
     user: 'Generate my workout plan',
     maxTokens: 4096,
     validate: p => Array.isArray(p?.days) && p.days.length === 7 &&
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      p.days.every((d: any) => d.isRest === true || (Array.isArray(d.exercises) && d.exercises.length > 0)),
+      p.days.every((d: WorkoutPlan['days'][number]) => d.isRest === true || (Array.isArray(d.exercises) && d.exercises.length > 0)),
   });
   return sanitizePlan(plan, equipment);
 }
 
-export async function adaptWorkoutPlan(equipment: string[], goal: string, lastPlan: WorkoutPlan, performance: any) {
+export async function adaptWorkoutPlan(equipment: string[], goal: string, lastPlan: WorkoutPlan, performance: unknown) {
   const { todayName, orderedDays } = getOrderedDays();
   const nextWeek = (lastPlan?.weekNumber || 0) + 1;
 

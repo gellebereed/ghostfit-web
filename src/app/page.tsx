@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getProfile, getCurrentPlan, getYesterdayResult, getWinCount, getStreak, getAllSessions } from '@/lib/db';
-import { WorkoutPlan, WorkoutDay, calculateTier } from '@/lib/types';
+import { WorkoutPlan, WorkoutDay, Exercise, calculateTier } from '@/lib/types';
 import { getAvatarPrefs, getCharEmoji } from '@/lib/avatar';
 import { getGhostTaunt } from '@/lib/taunts';
 import { getFocusTheme } from '@/lib/theme';
@@ -20,8 +20,8 @@ import WelcomeOverlay from '@/components/WelcomeOverlay';
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-function formatExerciseDetail(exercise: any): string {
-  const m = exercise.metricType || (exercise.type === 'cardio' ? 'cardio' : (exercise.type === 'duration' ? 'duration' : 'weight_reps'));
+function formatExerciseDetail(exercise: Exercise): string {
+  const m = exercise.metricType || (exercise.type === 'cardio' ? 'cardio' : 'weight_reps');
   
   if (m === 'duration' || m === 'cardio') {
     const secs = exercise.durationSeconds ?? (m === 'cardio' ? 600 : 30);
@@ -476,4 +476,3 @@ function isPastTime(hhmm: string): boolean {
   const now = new Date();
   return now.getHours() > h || (now.getHours() === h && now.getMinutes() >= (m || 0));
 }
-

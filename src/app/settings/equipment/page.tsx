@@ -17,12 +17,15 @@ export default function EquipmentEditorPage() {
   const [regenerating, setRegenerating] = useState(false);
   const [scanning, setScanning] = useState(false);
 
-  useEffect(() => { load(); }, []);
-
   async function load() {
     const profile = await getProfile();
     if (profile) setEquipment(profile.equipment);
   }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   async function removeItem(item: string) {
     const newEquip = equipment.filter(e => e !== item);

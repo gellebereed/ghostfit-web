@@ -199,7 +199,7 @@ export default function PostWorkoutRecap({
           )}
           {!isWin && !shieldUsed && (
             <p className="text-red-400/60 text-xs mt-0.5">
-              Rematch tomorrow — it's waiting 👻
+              Rematch tomorrow — it&apos;s waiting 👻
             </p>
           )}
         </div>
