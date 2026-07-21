@@ -323,6 +323,9 @@ create table if not exists meal_plans (
   created_at timestamptz default now()
 );
 
+-- Consolidated shopping list for the plan: { hash, categories: [...] }
+alter table meal_plans add column if not exists grocery_list jsonb;
+
 create table if not exists meal_logs (
   id uuid default gen_random_uuid() primary key,
   user_id uuid not null references profiles(id) on delete cascade,
@@ -400,3 +403,54 @@ create policy "Quests: own" on quests
 drop policy if exists "Quest tasks: own" on quest_tasks;
 create policy "Quest tasks: own" on quest_tasks
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- 11. Daily Rhythm (habits — deen & body daily practices) + recipe cache
+
+create table if not exists habits (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid not null references profiles(id) on delete cascade,
+  title text not null,
+  emoji text default '✨',
+  category text not null default 'body' check (category in ('deen', 'body', 'mind')),
+  sort_order integer default 0,
+  is_active boolean default true,
+  created_at timestamptz default now()
+);
+
+create table if not exists habit_logs (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid not null references profiles(id) on delete cascade,
+  habit_id uuid not null references habits(id) on delete cascade,
+  log_date date not null default current_date,
+  created_at timestamptz default now(),
+  unique (habit_id, log_date)
+);
+
+-- Shared recipe cache (same pattern as exercise_cache / food_catalogs)
+create table if not exists meal_recipes (
+  recipe_key text primary key,   -- slug of meal title + items hash
+  title text,
+  recipe jsonb not null,         -- { ingredients: string[], steps: string[], tip: string }
+  cached_at timestamptz default now()
+);
+
+alter table habits enable row level security;
+alter table habit_logs enable row level security;
+alter table meal_recipes enable row level security;
+
+drop policy if exists "Habits: own" on habits;
+create policy "Habits: own" on habits
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "Habit logs: own" on habit_logs;
+create policy "Habit logs: own" on habit_logs
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "Recipes: public read" on meal_recipes;
+create policy "Recipes: public read" on meal_recipes
+  for select using (true);
+drop policy if exists "Recipes: auth insert" on meal_recipes;
+create policy "Recipes: auth insert" on meal_recipes
+  for insert with check (auth.role() = 'authenticated');
+drop policy if exists "Recipes: auth update" on meal_recipes;
+create policy "Recipes: auth update" on meal_recipes
+  for update using (auth.role() = 'authenticated');

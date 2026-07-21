@@ -3,7 +3,7 @@
  */
 import { supabase } from './supabase';
 import {
-  ActivityLevel, FoodItem, MealLog, MealPlan, NutritionProfile,
+  ActivityLevel, FoodItem, GroceryList, MealLog, MealPlan, NutritionProfile, PlannedMeal,
 } from './types';
 
 async function uid(): Promise<string | null> {
@@ -186,7 +186,41 @@ export async function getCurrentMealPlan(): Promise<MealPlan | null> {
     weekNumber: data.week_number,
     days: data.days,
     createdAt: new Date(data.created_at).getTime(),
+    groceryList: data.grocery_list ?? null,
   };
+}
+
+// ─── Grocery list ────────────────────────────────────────────────────────────
+
+function planItemsHash(plan: MealPlan): string {
+  const all = plan.days.flatMap(d => d.meals.flatMap(m => m.items)).join('|');
+  let h = 5381;
+  for (let i = 0; i < all.length; i++) h = ((h << 5) + h + all.charCodeAt(i)) | 0;
+  return String(h);
+}
+
+/**
+ * Returns the plan's consolidated shopping list, regenerating only when the
+ * plan's meals changed (e.g. after a swap). Persisted on the plan row.
+ */
+export async function getGroceryList(plan: MealPlan, countryName?: string): Promise<GroceryList> {
+  const hash = planItemsHash(plan);
+  if (plan.groceryList && plan.groceryList.hash === hash) return plan.groceryList;
+
+  const mealItems = plan.days.flatMap(d => d.meals.flatMap(m => m.items));
+  const res = await fetch('/api/grocery-list', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mealItems, countryName }),
+  });
+  if (!res.ok) throw new Error('Could not build the grocery list. Try again.');
+  const { categories } = await res.json();
+
+  const list: GroceryList = { hash, categories };
+  if (plan.id) {
+    await supabase.from('meal_plans').update({ grocery_list: list }).eq('id', plan.id);
+  }
+  return list;
 }
 
 // ─── Meal logging ────────────────────────────────────────────────────────────
@@ -262,6 +296,89 @@ export async function getWeekAdherence(mealsPerDay: number): Promise<number> {
 export function isCheckinDue(plan: MealPlan | null): boolean {
   if (!plan) return false;
   return Date.now() - plan.createdAt >= 7 * 86400000;
+}
+
+// ─── Recipes (shared cache, exercise_cache pattern) ──────────────────────────
+
+export interface MealRecipe {
+  ingredients: string[];
+  steps: string[];
+  tip: string;
+}
+
+function recipeKey(meal: PlannedMeal): string {
+  return meal.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
+}
+
+export async function getMealRecipe(meal: PlannedMeal, countryName?: string): Promise<MealRecipe> {
+  const key = recipeKey(meal);
+  const { data } = await supabase
+    .from('meal_recipes')
+    .select('recipe')
+    .eq('recipe_key', key)
+    .single();
+  if (data?.recipe) return data.recipe as MealRecipe;
+
+  const res = await fetch('/api/meal-recipe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: meal.title, items: meal.items, countryName }),
+  });
+  if (!res.ok) throw new Error('Could not generate the recipe. Try again.');
+  const { recipe } = await res.json();
+
+  await supabase.from('meal_recipes').upsert({
+    recipe_key: key,
+    title: meal.title,
+    recipe,
+    cached_at: new Date().toISOString(),
+  });
+  return recipe as MealRecipe;
+}
+
+// ─── Swap a single meal ──────────────────────────────────────────────────────
+
+export async function requestSwapMeal(opts: {
+  profile: NutritionProfile;
+  catalog: FoodItem[];
+  meal: PlannedMeal;
+  avoidTitles: string[];
+}): Promise<PlannedMeal> {
+  const { profile, catalog } = opts;
+  const byId = new Map<string, FoodItem>();
+  [...catalog, ...profile.customFoods].forEach(f => byId.set(f.id, f));
+  const liked = profile.likedIds.map(id => byId.get(id)).filter(Boolean) as FoodItem[];
+
+  const res = await fetch('/api/swap-meal', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      countryName: profile.countryName,
+      mealName: opts.meal.name,
+      avoidTitles: opts.avoidTitles,
+      targetKcal: opts.meal.kcal,
+      targetProtein: opts.meal.protein,
+      likedFoods: liked.map(foodLabel),
+      restrictions: profile.restrictions,
+    }),
+  });
+  if (!res.ok) throw new Error('Could not build a new option. Try again.');
+  const { meal } = await res.json();
+  return meal as PlannedMeal;
+}
+
+/** Persist a replaced meal into the active plan. */
+export async function replaceMealInPlan(
+  plan: MealPlan, dayIndex: number, mealIndex: number, newMeal: PlannedMeal
+): Promise<MealPlan> {
+  const days = plan.days.map((d, di) => di !== dayIndex ? d : {
+    ...d,
+    meals: d.meals.map((m, mi) => mi === mealIndex ? newMeal : m),
+  });
+  if (plan.id) {
+    await supabase.from('meal_plans').update({ days }).eq('id', plan.id);
+  }
+  return { ...plan, days };
 }
 
 // ─── Plan generation helpers ─────────────────────────────────────────────────

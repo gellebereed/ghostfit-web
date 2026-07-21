@@ -9,6 +9,9 @@ import {
   addTask, closeQuest, createQuest, deleteTask, getQuests, questProgress,
   selectTodayTasks, toggleTask,
 } from '@/lib/quests';
+import {
+  addHabits, getHabits, Habit, PRESET_HABITS, removeHabit, toggleHabit,
+} from '@/lib/habits';
 import { SuggestedTask } from '@/services/questCoach';
 
 const TYPE_ORDER: QuestType[] = ['north_star', 'quarterly', 'monthly'];
@@ -32,6 +35,11 @@ export default function QuestsPage() {
   const [quickTask, setQuickTask] = useState('');
   const [newTaskTitles, setNewTaskTitles] = useState<Record<string, string>>({});
 
+  // Daily Rhythm (deen & body habits)
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [habitEdit, setHabitEdit] = useState(false);
+  const [newHabit, setNewHabit] = useState('');
+
   // New quest sheet
   const [sheetOpen, setSheetOpen] = useState(false);
   const [qTitle, setQTitle] = useState('');
@@ -46,9 +54,10 @@ export default function QuestsPage() {
 
   const load = useCallback(async () => {
     await refreshProfile();
-    const { quests: qs, inbox: ib } = await getQuests();
+    const [{ quests: qs, inbox: ib }, hb] = await Promise.all([getQuests(), getHabits()]);
     setQuests(qs);
     setInbox(ib);
+    setHabits(hb);
     setReady(true);
   }, [refreshProfile]);
 
@@ -64,6 +73,27 @@ export default function QuestsPage() {
     const delta = await toggleTask(task);
     flashCoins(delta);
     await load();
+  }
+
+  async function handleToggleHabit(habit: Habit) {
+    const othersDone = habits.filter(h => h.id !== habit.id).every(h => h.doneToday);
+    const delta = await toggleHabit(habit, !habit.doneToday && othersDone);
+    flashCoins(delta);
+    setHabits(await getHabits());
+  }
+
+  async function handleAddPresets() {
+    const existing = new Set(habits.map(h => h.title.toLowerCase()));
+    const toAdd = PRESET_HABITS.filter(p => !existing.has(p.title.toLowerCase()));
+    if (toAdd.length > 0) await addHabits(toAdd);
+    setHabits(await getHabits());
+  }
+
+  async function handleAddHabit() {
+    if (!newHabit.trim()) return;
+    await addHabits([{ title: newHabit.trim(), emoji: '✨', category: 'body' }]);
+    setNewHabit('');
+    setHabits(await getHabits());
   }
 
   async function handleQuickAdd() {
@@ -176,6 +206,69 @@ export default function QuestsPage() {
       </header>
 
       <div className="arena-body">
+        {/* DAILY RHYTHM — deen & body daily practices */}
+        <div className="rhythm-card">
+          <div className="arena-card-top">
+            <span className="arena-metric" style={{ color: '#FFD700' }}>☪️ Daily Rhythm</span>
+            <span className="arena-timer">
+              {habits.length > 0 && `${habits.filter(h => h.doneToday).length}/${habits.length} today`}
+              <button className="meal-undo" style={{ marginLeft: 8 }} onClick={() => setHabitEdit(e => !e)}>
+                {habitEdit ? 'done' : 'edit'}
+              </button>
+            </span>
+          </div>
+
+          {habits.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '8px 0' }}>
+              <p className="arena-card-sub" style={{ marginBottom: 12 }}>
+                The practices that anchor your day — deen first, body second. Small daily wins, tracked with streaks.
+              </p>
+              <div className="rhythm-preset-list">
+                {PRESET_HABITS.map(p => (
+                  <span key={p.title} className="rhythm-preset">{p.emoji} {p.title}</span>
+                ))}
+              </div>
+              <button className="btn-primary" style={{ marginTop: 14 }} onClick={handleAddPresets}>
+                BEGIN MY RHYTHM ☪️
+              </button>
+            </div>
+          ) : (
+            <>
+              {habits.map(h => (
+                <div className="rhythm-row" key={h.id}>
+                  <button
+                    className={`rhythm-check ${h.doneToday ? 'checked' : ''}`}
+                    onClick={() => handleToggleHabit(h)}
+                  >{h.doneToday ? '✓' : h.emoji}</button>
+                  <div className="task-body">
+                    <span className={`task-title ${h.doneToday ? 'rhythm-done' : ''}`}>{h.title}</span>
+                    {h.streak > 1 && <span className="task-meta" style={{ color: '#FFB020' }}>{h.streak} day streak 🔥</span>}
+                  </div>
+                  {habitEdit && (
+                    <button className="task-delete" onClick={() => removeHabit(h.id).then(() => getHabits().then(setHabits))}>✕</button>
+                  )}
+                </div>
+              ))}
+              {habits.length > 0 && habits.every(h => h.doneToday) && (
+                <p className="rhythm-alldone">🌟 Full rhythm today. This is who you are now.</p>
+              )}
+              {habitEdit && (
+                <div className="arena-code-row">
+                  <input
+                    className="arena-input"
+                    style={{ letterSpacing: 0, textTransform: 'none', fontWeight: 600, fontSize: 14 }}
+                    placeholder="Add a daily practice..."
+                    value={newHabit}
+                    onChange={e => setNewHabit(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleAddHabit()}
+                  />
+                  <button className="arena-btn accept" onClick={handleAddHabit}>+</button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
         {/* TODAY */}
         <div className="arena-card">
           <div className="arena-card-top">
@@ -225,7 +318,7 @@ export default function QuestsPage() {
                 const isOpen = expanded.has(q.id);
                 const parent = quests.find(p => p.id === q.parentId);
                 return (
-                  <div className="quest-card" key={q.id}>
+                  <div className={`quest-card tier-${q.questType}`} key={q.id}>
                     <div className="quest-card-head" onClick={() => {
                       setExpanded(prev => {
                         const next = new Set(prev);

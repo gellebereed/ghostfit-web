@@ -4,8 +4,118 @@
  * Voice note: the nutritionist is the SUPPORTIVE coach persona — the ghost
  * taunts, the nutritionist never does. Keep generated copy encouraging.
  */
-import { FoodItem, MealPlan } from '@/lib/types';
+import { FoodItem, GroceryCategory, MealPlan, PlannedMeal } from '@/lib/types';
 import { generateJSON } from './llm';
+
+export async function generateGroceryList(
+  mealItems: string[], countryName?: string
+): Promise<GroceryCategory[]> {
+  const prompt = `You are a practical meal-prep assistant${countryName ? ` in ${countryName}` : ''}.
+Below are ALL the meal components for one week of eating. Consolidate them into
+a single shopping list.
+
+Rules:
+- MERGE duplicates and SUM quantities across the week ("150g chicken" seven
+  times = "~1.1 kg chicken breast"). Round to amounts people actually buy.
+- Group into sensible aisles. Use these category names with emoji:
+  Proteins 🍗, Grains & Carbs 🍚, Vegetables 🥦, Fruits 🍌, Dairy 🥛,
+  Pantry & Spices 🧂 — omit any empty category, add another only if truly needed.
+- Skip water. Include cooking oil/basic seasonings once under Pantry & Spices.
+- Every item: short buyable name + one total quantity.
+
+Return ONLY valid JSON:
+{ "categories": [ { "name": "Proteins", "emoji": "🍗",
+    "items": [ { "name": "Chicken breast", "quantity": "1.1 kg" } ] } ] }`;
+
+  const parsed = await generateJSON<{ categories: GroceryCategory[] }>({
+    system: prompt,
+    user: `Week's meal components:\n${mealItems.join('\n')}`,
+    maxTokens: 4096,
+    validate: p => Array.isArray(p?.categories) && p.categories.length >= 2 &&
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      p.categories.every((c: any) => c?.name && Array.isArray(c?.items) && c.items.length > 0),
+  });
+  return parsed.categories.map(c => ({
+    name: String(c.name),
+    emoji: String(c.emoji ?? '🛒'),
+    items: c.items.map(i => ({ name: String(i.name), quantity: String(i.quantity ?? '') })),
+  }));
+}
+
+export interface MealRecipe {
+  ingredients: string[];
+  steps: string[];
+  tip: string;
+}
+
+export async function generateRecipe(title: string, items: string[], countryName?: string): Promise<MealRecipe> {
+  const prompt = `You are a warm, practical home-cooking coach${countryName ? ` familiar with ${countryName} kitchens` : ''}.
+Write a simple recipe for this meal. Assume a basic kitchen and a busy person.
+
+Return ONLY valid JSON:
+{
+  "ingredients": ["exact quantity + ingredient", ...],
+  "steps": ["short imperative step", ...],   // 4-8 steps, each one action
+  "tip": "one sentence that makes it tastier or faster"
+}`;
+
+  const parsed = await generateJSON<MealRecipe>({
+    system: prompt,
+    user: `Meal: ${title}\nComponents: ${items.join('; ')}`,
+    maxTokens: 2048,
+    validate: p => Array.isArray(p?.ingredients) && p.ingredients.length >= 1 &&
+      Array.isArray(p?.steps) && p.steps.length >= 3,
+  });
+  return {
+    ingredients: parsed.ingredients.map(String),
+    steps: parsed.steps.map(String),
+    tip: String(parsed.tip ?? ''),
+  };
+}
+
+export interface SwapMealRequest {
+  countryName: string;
+  mealName: string;        // Breakfast / Lunch / Snack / Dinner
+  avoidTitles: string[];   // titles already in the plan (don't repeat)
+  targetKcal: number;
+  targetProtein: number;
+  likedFoods: string[];
+  restrictions: string[];
+}
+
+export async function swapMealOption(req: SwapMealRequest): Promise<PlannedMeal> {
+  const prompt = `You are a world-class nutritionist in ${req.countryName}. The client wants a
+DIFFERENT option for one meal — same nutrition, new dish.
+
+Requirements:
+- Meal slot: ${req.mealName}
+- Hit ${req.targetKcal} kcal (±8%) and ${req.targetProtein}g protein (±5g)
+- Build ONLY from these foods (plus basic seasonings/oil): ${req.likedFoods.join('; ')}
+- NEVER violate: ${req.restrictions.length ? req.restrictions.join(', ') : 'no restrictions'}
+- Must be clearly different from: ${req.avoidTitles.join(' | ') || 'nothing'}
+- Concrete quantities on every item
+
+Return ONLY valid JSON:
+{ "name": "${req.mealName}", "title": "Appetizing Dish Name",
+  "items": ["quantity + food", ...], "kcal": 0, "protein": 0, "carbs": 0, "fat": 0 }`;
+
+  const parsed = await generateJSON<PlannedMeal>({
+    system: prompt,
+    user: 'Give me a different option for this meal',
+    maxTokens: 1536,
+    validate: p => typeof p?.title === 'string' && Array.isArray(p?.items) && p.items.length >= 1 &&
+      Number(p?.kcal) > 0,
+  });
+  return {
+    name: req.mealName,
+    title: String(parsed.title),
+    items: parsed.items.map(String),
+    kcal: Math.max(0, Math.round(Number(parsed.kcal) || 0)),
+    protein: Math.max(0, Math.round(Number(parsed.protein) || 0)),
+    carbs: Math.max(0, Math.round(Number(parsed.carbs) || 0)),
+    fat: Math.max(0, Math.round(Number(parsed.fat) || 0)),
+  };
+}
 
 const VALID_CATEGORIES = ['protein', 'carb', 'vegetable', 'fruit', 'dairy', 'fat', 'snack', 'drink'];
 

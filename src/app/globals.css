@@ -1273,3 +1273,134 @@ button, input {
 .task-delete{background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;padding:4px;opacity:0.6;}
 .coin-flash{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:600;background:var(--surface);border:1px solid var(--accent);color:var(--accent);font-family:var(--font-display);font-weight:700;font-size:18px;padding:8px 18px;border-radius:20px;box-shadow:0 0 24px var(--accent-glow2);animation:coinFloat 1.6s ease both;pointer-events:none;}
 @keyframes coinFloat{0%{opacity:0;transform:translate(-50%,10px);}15%{opacity:1;transform:translate(-50%,0);}80%{opacity:1;}100%{opacity:0;transform:translate(-50%,-14px);}}
+
+/* ===========================================
+   World-class pass — nav v2, battle juice, nutrition v2, rhythm, epic quests
+   =========================================== */
+
+/* Bottom nav v2: bigger targets, active pill, labels */
+.nav.nav-v2{padding:8px 4px calc(8px + env(safe-area-inset-bottom));}
+.nav-v2 .nav-item{padding:6px 4px;gap:4px;font-size:10px;letter-spacing:0.3px;flex:1;text-transform:none;font-weight:700;}
+.nav-v2 .nav-icon-wrap{display:flex;align-items:center;justify-content:center;width:52px;height:30px;border-radius:15px;transition:var(--t);}
+.nav-v2 .nav-item svg{width:22px;height:22px;transition:var(--t);}
+.nav-v2 .nav-item.active .nav-icon-wrap{background:var(--accent-glow);box-shadow:0 0 16px var(--accent-glow);}
+.nav-v2 .nav-item.active svg{filter:drop-shadow(0 0 5px var(--accent-glow2));transform:translateY(-1px);}
+.nav-v2 .nav-item.active::after{display:none;}
+.nav-v2 .nav-label{line-height:1;}
+.nav-v2 .nav-item.active .nav-label{color:var(--accent);}
+
+/* Battle screen juice */
+.fighter-arena{min-height:180px;background:
+  radial-gradient(ellipse at 20% 0%,rgba(0,255,135,0.06),transparent 50%),
+  radial-gradient(ellipse at 80% 0%,rgba(255,68,68,0.05),transparent 50%),
+  linear-gradient(180deg,#0D1117,#0d1218 60%,#0A0A0A);}
+.fighter-arena::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(90deg,rgba(255,255,255,0.015) 0 1px,transparent 1px 24px);pointer-events:none;}
+.hb-track{height:12px;border:1px solid rgba(255,255,255,0.07);position:relative;}
+.hb-fill{background:linear-gradient(90deg,var(--accent-dim),var(--accent));box-shadow:0 0 12px var(--accent-glow2);position:relative;overflow:hidden;}
+.hb-fill::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,0.35),transparent 50%);border-radius:99px;}
+.hb-fill.ghost-fill{background:linear-gradient(270deg,#8B5CF6,#5b3d99);box-shadow:0 0 12px rgba(139,92,246,0.3);}
+.hb-name{font-family:var(--font-display);font-size:11px;}
+.hb-vs{font-family:var(--font-display);font-size:13px;color:var(--accent);text-shadow:0 0 12px var(--accent-glow2);}
+.fc-score{font-family:var(--font-display);font-size:44px;text-shadow:0 0 20px var(--accent-glow);}
+.fc-card{box-shadow:0 8px 24px rgba(0,0,0,0.5);}
+.fighter-card-wrap.fc-scored{transform:scale(1.14) translateY(-3px);}
+
+/* Macro dashboard */
+.macro-dash{display:flex;gap:16px;align-items:center;background:linear-gradient(135deg,var(--accent-glow) 0%,var(--surface) 45%);border:1px solid var(--border);border-radius:var(--r);padding:16px;}
+.macro-ring-wrap{position:relative;width:110px;min-width:110px;height:110px;}
+.macro-ring{width:100%;height:100%;}
+.macro-ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;}
+.macro-ring-num{font-family:var(--font-display);font-size:24px;font-weight:700;line-height:1;}
+.macro-ring-label{font-size:9px;color:var(--text3);font-weight:700;}
+.macro-bars{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px;}
+.macro-bar-row{display:flex;align-items:center;gap:8px;}
+.macro-bar-label{width:52px;min-width:52px;font-size:9px;font-weight:800;letter-spacing:1px;color:var(--text2);}
+.macro-bar-val{min-width:56px;text-align:right;font-size:11px;font-weight:800;font-variant-numeric:tabular-nums;}
+.macro-bar-val em{font-style:normal;color:var(--text3);font-weight:600;}
+
+/* Day browser strip */
+.day-strip{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;}
+.day-strip::-webkit-scrollbar{display:none;}
+.day-strip-chip{flex:1;min-width:52px;padding:10px 4px;background:var(--surface);border:1px solid var(--border);border-radius:var(--rs);color:var(--text2);font-family:var(--font-display);font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer;transition:var(--t);}
+.day-strip-chip.today{border-color:var(--accent-glow2);}
+.day-strip-chip.active{background:var(--accent-glow);border-color:var(--accent);color:var(--accent);box-shadow:0 0 14px var(--accent-glow);}
+
+/* Meal cards v2 */
+.meal-card.v2{position:relative;overflow:hidden;border-radius:18px;background:linear-gradient(160deg,var(--surface2) 0%,var(--surface) 40%);}
+.meal-card.v2::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent-glow2),transparent);}
+.meal-emoji{width:46px;height:46px;min-width:46px;border-radius:14px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:24px;}
+.meal-macro-pills{display:flex;flex-direction:column;gap:4px;align-items:flex-end;}
+.meal-pill{font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px;white-space:nowrap;font-variant-numeric:tabular-nums;}
+.meal-pill.kcal{background:var(--accent-glow);color:var(--accent);}
+.meal-pill.protein{background:rgba(96,165,250,0.15);color:#60A5FA;}
+.meal-tools{display:flex;gap:8px;margin-bottom:12px;}
+.meal-tool{flex:1;padding:9px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text2);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:var(--t);}
+.meal-tool:hover{border-color:var(--accent);color:var(--accent);}
+.meal-tool:disabled{opacity:0.5;cursor:wait;}
+
+/* Recipe modal */
+.recipe-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;}
+.recipe-list li{font-size:13px;color:var(--text2);padding:8px 12px;background:var(--surface2);border-radius:8px;}
+.recipe-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}
+.recipe-steps li{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.5;color:var(--text);}
+.recipe-step-num{min-width:22px;height:22px;border-radius:50%;background:var(--accent-glow);color:var(--accent);font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;margin-top:1px;}
+.recipe-tip{margin-top:14px;padding:10px 12px;background:rgba(255,215,0,0.07);border-left:2px solid #FFD700;border-radius:0 8px 8px 0;font-size:12px;color:var(--text2);line-height:1.5;}
+
+/* Daily Rhythm */
+.rhythm-card{background:linear-gradient(150deg,rgba(255,215,0,0.06) 0%,var(--surface) 45%);border:1px solid rgba(255,215,0,0.25);border-radius:var(--r);padding:16px;}
+.rhythm-row{display:flex;align-items:center;gap:12px;padding:7px 0;}
+.rhythm-check{width:38px;height:38px;min-width:38px;border-radius:12px;border:1px solid var(--border);background:var(--surface2);font-size:18px;cursor:pointer;transition:all 0.25s cubic-bezier(0.34,1.56,0.64,1);display:flex;align-items:center;justify-content:center;color:#000;}
+.rhythm-check.checked{background:#FFD700;border-color:#FFD700;font-weight:900;transform:scale(1.05);box-shadow:0 0 14px rgba(255,215,0,0.35);}
+.rhythm-done{text-decoration:line-through;color:var(--text3);}
+.rhythm-alldone{margin-top:10px;text-align:center;font-size:13px;font-weight:700;color:#FFD700;animation:riseIn 0.4s ease both;}
+.rhythm-preset-list{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;}
+.rhythm-preset{font-size:12px;font-weight:600;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:6px 10px;}
+
+/* Epic quest tiers */
+.quest-card{position:relative;overflow:hidden;}
+.quest-card.tier-north_star{border:1px solid rgba(255,215,0,0.45);background:linear-gradient(160deg,rgba(255,215,0,0.08) 0%,var(--surface) 50%);}
+.quest-card.tier-north_star::before{content:'NORTH STAR';position:absolute;top:10px;right:-26px;transform:rotate(38deg);background:linear-gradient(90deg,#8a6d00,#FFD700,#8a6d00);color:#000;font-size:8px;font-weight:900;letter-spacing:1.5px;padding:3px 30px;}
+.quest-card.tier-north_star .quest-card-title{font-family:var(--font-display);font-size:19px;letter-spacing:0.5px;}
+.quest-card.tier-north_star .quest-card-pct{color:#FFD700;}
+.quest-card.tier-north_star .arena-race-fill.you{background:linear-gradient(90deg,#b8860b,#FFD700);box-shadow:0 0 14px rgba(255,215,0,0.35);}
+.quest-card.tier-quarterly{border:1px solid rgba(139,92,246,0.4);background:linear-gradient(160deg,rgba(139,92,246,0.07) 0%,var(--surface) 50%);}
+.quest-card.tier-quarterly .quest-card-pct{color:#A78BFA;}
+.quest-card.tier-quarterly .arena-race-fill.you{background:linear-gradient(90deg,#6d28d9,#A78BFA);box-shadow:0 0 12px rgba(139,92,246,0.3);}
+.quest-card.tier-monthly{border-left:3px solid var(--accent);}
+
+/* ===========================================
+   Set tracker — every set is a round of the fight
+   =========================================== */
+.st-strip{display:flex;gap:6px;margin:10px 0 14px;}
+.st-slot{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);position:relative;transition:var(--t);min-width:0;}
+.st-round{font-size:8px;font-weight:900;letter-spacing:1.5px;color:var(--text3);}
+.st-val{font-family:var(--font-display);font-size:14px;font-weight:700;color:var(--text2);white-space:nowrap;overflow:hidden;max-width:100%;text-overflow:ellipsis;}
+.st-slot.done{border-color:var(--accent-glow2);background:linear-gradient(160deg,var(--accent-glow),var(--surface2));}
+.st-slot.done .st-val{color:var(--accent);}
+.st-slot.done.beat{border-color:#FFD700;background:linear-gradient(160deg,rgba(255,215,0,0.12),var(--surface2));}
+.st-slot.done.beat .st-val{color:#FFD700;}
+.st-slot.current{border-color:var(--accent);box-shadow:0 0 12px var(--accent-glow);animation:stPulse 1.6s ease-in-out infinite;}
+.st-slot.current .st-val{color:var(--text);}
+@keyframes stPulse{0%,100%{box-shadow:0 0 8px var(--accent-glow);}50%{box-shadow:0 0 18px var(--accent-glow2);}}
+.st-slot.todo{opacity:0.45;}
+.st-tick{position:absolute;top:-6px;right:-4px;font-size:11px;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.6));}
+.sl-pace-chip{margin-left:auto;font-size:10px;font-weight:800;color:#8B5CF6;background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);border-radius:10px;padding:3px 8px;white-space:nowrap;}
+
+/* ===========================================
+   Grocery list
+   =========================================== */
+.grocery-link{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px 16px;transition:var(--t);}
+.grocery-link:active{transform:scale(0.98);}
+.grocery-link-text{flex:1;display:flex;flex-direction:column;min-width:0;}
+.grocery-cat{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;transition:opacity 0.3s;}
+.grocery-cat.done{opacity:0.55;}
+.grocery-cat-title{font-size:11px;font-weight:800;letter-spacing:2px;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:8px;}
+.grocery-cat-count{margin-left:auto;font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums;}
+.grocery-row{display:flex;align-items:center;gap:12px;width:100%;padding:9px 0;background:none;border:none;border-bottom:1px solid rgba(255,255,255,0.04);color:var(--text);font-family:inherit;font-size:14px;cursor:pointer;text-align:left;}
+.grocery-row:last-child{border-bottom:none;}
+.grocery-row.checked .grocery-name{text-decoration:line-through;color:var(--text3);}
+.grocery-row.checked .grocery-qty{color:var(--text3);}
+.grocery-box{width:24px;height:24px;min-width:24px;border-radius:8px;border:2px solid var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#000;transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1);}
+.grocery-box.checked{background:var(--accent);border-color:var(--accent);transform:scale(1.05);}
+.grocery-name{flex:1;font-weight:600;min-width:0;}
+.grocery-qty{font-size:12px;font-weight:800;color:var(--accent);white-space:nowrap;font-variant-numeric:tabular-nums;}

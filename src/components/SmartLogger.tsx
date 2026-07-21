@@ -17,11 +17,57 @@ interface SmartLoggerProps {
   isResting: boolean;
   restSeconds: number;
   onSkipRest: () => void;
+  completedSets?: SetData[];       // per-set history for the tracker strip
+  ghostPerSet?: number | null;     // ghost's pace per set (reps or seconds)
+  defaultWeight?: number;          // prefill: ghost avg weight / last session
+  defaultReps?: number;            // prefill: plan target reps
+}
+
+// ─────────────────────────────────────────────────────────────
+// SET TRACKER — every set is a round of the fight
+// ─────────────────────────────────────────────────────────────
+
+function SetTracker({ totalSets, currentSet, completedSets, ghostPerSet, metricType }: {
+  totalSets: number;
+  currentSet: number;
+  completedSets: SetData[];
+  ghostPerSet: number | null;
+  metricType: string;
+}) {
+  if (metricType === 'cardio') return null;
+  return (
+    <div className="st-strip">
+      {Array.from({ length: totalSets }, (_, i) => {
+        const done = completedSets[i];
+        const isCurrent = !done && i + 1 === currentSet;
+        const myScore = done ? (metricType === 'duration' ? (done.duration ?? 0) : (done.reps ?? 0)) : 0;
+        const beatPace = done && ghostPerSet !== null && myScore > ghostPerSet;
+        return (
+          <div key={i} className={`st-slot ${done ? (beatPace ? 'done beat' : 'done') : isCurrent ? 'current' : 'todo'}`}>
+            <span className="st-round">R{i + 1}</span>
+            <span className="st-val">
+              {done ? (
+                metricType === 'weight_reps' ? `${done.reps}×${done.weight ?? 0}` :
+                metricType === 'duration' ? `${done.duration}s` :
+                `${done.reps}`
+              ) : isCurrent ? (
+                ghostPerSet !== null ? `👻 ${metricType === 'duration' ? `${ghostPerSet}s` : ghostPerSet}` : 'GO'
+              ) : (
+                '·'
+              )}
+            </span>
+            {done && <span className="st-tick">{beatPace ? '⚡' : '✓'}</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export function SmartLogger({
   exercise, currentSet, onSetComplete,
-  ghostDuration = 0, isResting, restSeconds, onSkipRest
+  ghostDuration = 0, isResting, restSeconds, onSkipRest,
+  completedSets = [], ghostPerSet = null, defaultWeight = 0, defaultReps = 0,
 }: SmartLoggerProps) {
 
   // Read metricType directly from plan — AI already decided this
@@ -42,7 +88,18 @@ export function SmartLogger({
           {metricType === 'cardio'           && 'Running Timer'}
           {metricType === 'reps_only'        && 'Reps'}
         </span>
+        {ghostPerSet !== null && metricType !== 'cardio' && (
+          <span className="sl-pace-chip">👻 pace: {metricType === 'duration' ? `${ghostPerSet}s` : ghostPerSet}/set</span>
+        )}
       </div>
+
+      <SetTracker
+        totalSets={exercise.sets}
+        currentSet={currentSet}
+        completedSets={completedSets}
+        ghostPerSet={ghostPerSet}
+        metricType={metricType}
+      />
 
       {metricType === 'weight_reps' && (
         <WeightRepsLogger
@@ -52,6 +109,8 @@ export function SmartLogger({
           onSkipRest={onSkipRest}
           currentSet={currentSet}
           totalSets={exercise.sets}
+          defaultWeight={defaultWeight}
+          defaultReps={defaultReps}
         />
       )}
 
@@ -63,6 +122,7 @@ export function SmartLogger({
           onSkipRest={onSkipRest}
           currentSet={currentSet}
           totalSets={exercise.sets}
+          defaultReps={defaultReps}
         />
       )}
 
@@ -74,6 +134,7 @@ export function SmartLogger({
           onSkipRest={onSkipRest}
           currentSet={currentSet}
           totalSets={exercise.sets}
+          defaultReps={defaultReps}
         />
       )}
 
@@ -130,9 +191,10 @@ function CompleteSetButton({ onComplete }: { onComplete: () => void }) {
 // ─────────────────────────────────────────────────────────────
 
 function WeightRepsLogger({ onComplete, isResting, restSeconds,
-  onSkipRest, currentSet, totalSets }: any) {
-  const [weight, setWeight] = useState(0);
-  const [reps, setReps] = useState(0);
+  onSkipRest, currentSet, totalSets, defaultWeight, defaultReps }: any) {
+  // Prefilled from the ghost's last performance / plan target — log in one tap
+  const [weight, setWeight] = useState<number>(defaultWeight || 0);
+  const [reps, setReps] = useState<number>(defaultReps || 0);
 
   if (isResting) return (
     <RestTimer seconds={restSeconds} onSkip={onSkipRest}
@@ -198,8 +260,8 @@ function WeightRepsLogger({ onComplete, isResting, restSeconds,
 // ─────────────────────────────────────────────────────────────
 
 function BodyweightRepsLogger({ onComplete, isResting, restSeconds,
-  onSkipRest, currentSet, totalSets }: any) {
-  const [reps, setReps] = useState(0);
+  onSkipRest, currentSet, totalSets, defaultReps }: any) {
+  const [reps, setReps] = useState<number>(defaultReps || 0);
 
   if (isResting) return (
     <RestTimer seconds={restSeconds} onSkip={onSkipRest}
@@ -240,8 +302,8 @@ function BodyweightRepsLogger({ onComplete, isResting, restSeconds,
 // ─────────────────────────────────────────────────────────────
 
 function RepsOnlyLogger({ onComplete, isResting, restSeconds,
-  onSkipRest, currentSet, totalSets }: any) {
-  const [reps, setReps] = useState(0);
+  onSkipRest, currentSet, totalSets, defaultReps }: any) {
+  const [reps, setReps] = useState<number>(defaultReps || 0);
 
   if (isResting) return (
     <RestTimer seconds={restSeconds} onSkip={onSkipRest}

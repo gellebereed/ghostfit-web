@@ -184,11 +184,28 @@ export interface MealPlanDay {
   meals: PlannedMeal[];
 }
 
+export interface GroceryItem {
+  name: string;
+  quantity: string;    // e.g. "1.2 kg", "3 pieces"
+}
+
+export interface GroceryCategory {
+  name: string;
+  emoji: string;
+  items: GroceryItem[];
+}
+
+export interface GroceryList {
+  hash: string;        // hash of plan items — detects staleness after meal swaps
+  categories: GroceryCategory[];
+}
+
 export interface MealPlan {
   id?: string;
   weekNumber: number;
   days: MealPlanDay[];
   createdAt: number;
+  groceryList?: GroceryList | null;
 }
 
 export interface MealLog {

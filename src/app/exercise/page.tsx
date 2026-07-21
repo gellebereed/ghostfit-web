@@ -87,6 +87,7 @@ function ExerciseContent() {
   const [totalReps, setTotalReps] = useState(0);
   const [weights, setWeights] = useState<number[]>([]);
   const [setsCompleted, setSetsCompleted] = useState(0);
+  const [setLog, setSetLog] = useState<Array<{ reps?: number; weight?: number; duration?: number }>>([]);
 
   // Cardio state
   const [seconds, setSeconds] = useState(0);
@@ -261,6 +262,7 @@ function ExerciseContent() {
       setWeights(prev => [...prev, w]);
       setSetsCompleted(prev => prev + 1);
     }
+    setSetLog(prev => [...prev, { reps: r, weight: w, duration: d }]);
 
     playSetComplete();
     hapticSetComplete();
@@ -706,6 +708,15 @@ function ExerciseContent() {
             isResting={isResting}
             restSeconds={restSeconds}
             onSkipRest={handleSkipRest}
+            completedSets={setLog}
+            ghostPerSet={
+              !ghost || exercise.metricType === 'cardio' ? null
+              : exercise.metricType === 'duration'
+                ? Math.ceil(ghost.totalDuration / Math.max(exercise.sets, 1))
+                : Math.ceil(ghost.totalReps / Math.max(exercise.sets, 1))
+            }
+            defaultWeight={Math.round(ghost?.avgWeight ?? 0)}
+            defaultReps={exercise.reps || 0}
           />
         </div>
 
