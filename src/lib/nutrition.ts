@@ -3,7 +3,7 @@
  */
 import { supabase } from './supabase';
 import {
-  ActivityLevel, FoodItem, GroceryList, MealLog, MealPlan, NutritionProfile, PlannedMeal,
+  ActivityLevel, FoodItem, GroceryList, MealLog, MealPlan, MealPlanDay, NutritionProfile, PlannedMeal,
 } from './types';
 
 async function uid(): Promise<string | null> {
@@ -233,7 +233,8 @@ function todayKey(): string {
 export async function logMeal(
   mealIndex: number,
   status: 'ate' | 'skipped',
-  macros: { kcal: number; protein: number; carbs: number; fat: number }
+  macros: { kcal: number; protein: number; carbs: number; fat: number },
+  note?: string | null
 ): Promise<boolean> {
   const userId = await uid();
   if (!userId) return false;
@@ -247,8 +248,24 @@ export async function logMeal(
     protein: status === 'ate' ? macros.protein : 0,
     carbs: status === 'ate' ? macros.carbs : 0,
     fat: status === 'ate' ? macros.fat : 0,
+    note: note ?? null,
   }, { onConflict: 'user_id,log_date,meal_index' });
   return !error;
+}
+
+/** Analyze free-text of an off-plan meal → macros, then log it against the slot. */
+export async function logOffPlanMeal(
+  mealIndex: number, mealName: string, description: string
+): Promise<PlannedMeal> {
+  const res = await fetch('/api/analyze-meal', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ description, mealName }),
+  });
+  if (!res.ok) throw new Error('Could not analyze that meal. Try describing it more simply.');
+  const { meal } = (await res.json()) as { meal: PlannedMeal };
+  await logMeal(mealIndex, 'ate', meal, description.slice(0, 200));
+  return meal;
 }
 
 export async function getTodayLogs(): Promise<MealLog[]> {
@@ -270,6 +287,7 @@ export async function getTodayLogs(): Promise<MealLog[]> {
     protein: r.protein ?? 0,
     carbs: r.carbs ?? 0,
     fat: r.fat ?? 0,
+    note: r.note ?? null,
   }));
 }
 
@@ -365,6 +383,12 @@ export async function requestSwapMeal(opts: {
   if (!res.ok) throw new Error('Could not build a new option. Try again.');
   const { meal } = await res.json();
   return meal as PlannedMeal;
+}
+
+/** Persist a full day-set of meals for a plan (used by rebalance). */
+export async function saveMealPlanDays(planId: string | undefined, days: MealPlanDay[]): Promise<void> {
+  if (!planId) return;
+  await supabase.from('meal_plans').update({ days }).eq('id', planId);
 }
 
 /** Persist a replaced meal into the active plan. */

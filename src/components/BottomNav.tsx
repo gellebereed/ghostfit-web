@@ -32,6 +32,7 @@ const TABS: Array<{ id: NavTab; href: string; label: string; icon: React.ReactNo
 export default function BottomNav({ active }: { active: NavTab }) {
   return (
     <nav className="nav nav-v2">
+      <div className="nav-brand">👻 <span>GHOSTFIT</span></div>
       {TABS.map(tab => (
         <Link key={tab.id} href={tab.href} className={`nav-item ${active === tab.id ? 'active' : ''}`}>
           <span className="nav-icon-wrap">

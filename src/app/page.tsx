@@ -8,6 +8,10 @@ import { WorkoutPlan, WorkoutDay, calculateTier } from '@/lib/types';
 import { getAvatarPrefs, getCharEmoji } from '@/lib/avatar';
 import { getGhostTaunt } from '@/lib/taunts';
 import { getFocusTheme } from '@/lib/theme';
+import { getNutritionProfile, getCurrentMealPlan, getTodayLogs } from '@/lib/nutrition';
+import { getQuests, selectTodayTasks } from '@/lib/quests';
+import { getHabits } from '@/lib/habits';
+import { getActiveChallengeCount } from '@/lib/social';
 
 import { useAppStore } from '@/store/appStore';
 import { Avatar } from '@/components/Avatar';
@@ -53,6 +57,12 @@ export default function HomePage() {
   const [taunt, setTaunt] = useState('');
   const [daysAway, setDaysAway] = useState<number | null>(null);
   const [freshStart, setFreshStart] = useState(false);
+  const [dash, setDash] = useState<{
+    fuel: { has: boolean; kcal: number; target: number } | null;
+    quests: { dueToday: number; active: number } | null;
+    rhythm: { done: number; total: number } | null;
+    challenges: number;
+  }>({ fuel: null, quests: null, rhythm: null, challenges: 0 });
 
   useEffect(() => {
     let mounted = true;
@@ -139,11 +149,42 @@ export default function HomePage() {
       }
     }
     init();
-    return () => { 
-      mounted = false; 
+    return () => {
+      mounted = false;
       clearTimeout(loaderTimer);
     };
   }, [router, refreshProfile]);
+
+  // Control-center summaries — loaded separately so they never block the battle view
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const [np, mealPlan, logs, q, habits, chal] = await Promise.all([
+          getNutritionProfile(),
+          getCurrentMealPlan(),
+          getTodayLogs(),
+          getQuests(),
+          getHabits(),
+          getActiveChallengeCount(),
+        ]);
+        if (!live) return;
+        const kcal = logs.filter(l => l.status === 'ate').reduce((a, l) => a + l.kcal, 0);
+        const todayTasks = selectTodayTasks(q.quests, q.inbox);
+        setDash({
+          fuel: np?.onboardingComplete && mealPlan
+            ? { has: true, kcal, target: np.targetKcal }
+            : { has: false, kcal: 0, target: 0 },
+          quests: { dueToday: todayTasks.length, active: q.quests.filter(x => x.status === 'active').length },
+          rhythm: { done: habits.filter(h => h.doneToday).length, total: habits.length },
+          challenges: chal,
+        });
+      } catch (e) {
+        console.warn('Dashboard summary load failed:', e);
+      }
+    })();
+    return () => { live = false; };
+  }, []);
 
   if (!ready) {
     if (!showLoader) return null;
@@ -336,6 +377,79 @@ export default function HomePage() {
             </div>
           );
         })}
+      </div>
+
+      <p className="dash-section-title">Your day at a glance</p>
+      <div className="dash-grid">
+        {/* Fuel */}
+        <Link href="/nutrition" className="dash-tile">
+          <div className="dash-tile-head">
+            <span className="dash-tile-emoji">🥗</span>
+            <span className="dash-tile-name">Fuel</span>
+            <span className="dash-tile-arrow">→</span>
+          </div>
+          {dash.fuel?.has ? (
+            <>
+              <span className="dash-tile-stat">{dash.fuel.kcal}<span style={{ fontSize: 13, color: 'var(--text3)', fontWeight: 600 }}> / {dash.fuel.target} kcal</span></span>
+              <div className="dash-mini-track">
+                <div className="dash-mini-fill" style={{ width: `${dash.fuel.target ? Math.min(100, (dash.fuel.kcal / dash.fuel.target) * 100) : 0}%`, background: 'var(--accent)' }} />
+              </div>
+            </>
+          ) : (
+            <span className="dash-tile-sub">Set up your meal plan — country-aware, built from foods you love.</span>
+          )}
+        </Link>
+
+        {/* Quests */}
+        <Link href="/quests" className="dash-tile">
+          <div className="dash-tile-head">
+            <span className="dash-tile-emoji">🎯</span>
+            <span className="dash-tile-name">Quests</span>
+            <span className="dash-tile-arrow">→</span>
+          </div>
+          {dash.quests ? (
+            <>
+              <span className="dash-tile-stat">{dash.quests.dueToday}<span style={{ fontSize: 13, color: 'var(--text3)', fontWeight: 600 }}> due today</span></span>
+              <span className="dash-tile-sub">{dash.quests.active} active {dash.quests.active === 1 ? 'quest' : 'quests'} in motion</span>
+            </>
+          ) : <span className="dash-tile-sub">Loading…</span>}
+        </Link>
+
+        {/* Daily Rhythm */}
+        <Link href="/quests" className="dash-tile">
+          <div className="dash-tile-head">
+            <span className="dash-tile-emoji">☪️</span>
+            <span className="dash-tile-name">Daily Rhythm</span>
+            <span className="dash-tile-arrow">→</span>
+          </div>
+          {dash.rhythm && dash.rhythm.total > 0 ? (
+            <>
+              <span className="dash-tile-stat">{dash.rhythm.done}<span style={{ fontSize: 13, color: 'var(--text3)', fontWeight: 600 }}> / {dash.rhythm.total} today</span></span>
+              <div className="dash-mini-track">
+                <div className="dash-mini-fill" style={{ width: `${(dash.rhythm.done / dash.rhythm.total) * 100}%`, background: '#FFD700' }} />
+              </div>
+            </>
+          ) : (
+            <span className="dash-tile-sub">Anchor your day — deen &amp; body practices with streaks.</span>
+          )}
+        </Link>
+
+        {/* Arena */}
+        <Link href="/arena" className="dash-tile">
+          <div className="dash-tile-head">
+            <span className="dash-tile-emoji">⚔️</span>
+            <span className="dash-tile-name">Arena</span>
+            <span className="dash-tile-arrow">→</span>
+          </div>
+          {dash.challenges > 0 ? (
+            <>
+              <span className="dash-tile-stat">{dash.challenges}<span style={{ fontSize: 13, color: 'var(--text3)', fontWeight: 600 }}> live {dash.challenges === 1 ? 'battle' : 'battles'}</span></span>
+              <span className="dash-tile-sub">Keep the pressure on. Every rep counts.</span>
+            </>
+          ) : (
+            <span className="dash-tile-sub">Challenge a friend — or your own best self.</span>
+          )}
+        </Link>
       </div>
 
       <div style={{ textAlign: 'center', marginBottom: 40 }}>

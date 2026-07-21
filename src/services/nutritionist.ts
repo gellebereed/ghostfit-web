@@ -73,6 +73,33 @@ Return ONLY valid JSON:
   };
 }
 
+/**
+ * Analyze free-text of what the user actually ate → macros.
+ * Deliberately tiny (short prompt, low token cap) — called on demand only.
+ */
+export async function analyzeMeal(description: string, mealName: string): Promise<PlannedMeal> {
+  const prompt = `Estimate nutrition for what the user ate. Be realistic; if amounts
+are vague, assume a normal portion. Return ONLY JSON:
+{ "title": "short name of the meal", "items": ["item as stated"],
+  "kcal": 0, "protein": 0, "carbs": 0, "fat": 0 }`;
+
+  const parsed = await generateJSON<PlannedMeal>({
+    system: prompt,
+    user: description.slice(0, 400),
+    maxTokens: 500,
+    validate: p => typeof p?.title === 'string' && Number(p?.kcal) >= 0 && p?.kcal !== undefined,
+  });
+  return {
+    name: mealName,
+    title: String(parsed.title || description.slice(0, 40)),
+    items: Array.isArray(parsed.items) ? parsed.items.map(String) : [description],
+    kcal: Math.max(0, Math.round(Number(parsed.kcal) || 0)),
+    protein: Math.max(0, Math.round(Number(parsed.protein) || 0)),
+    carbs: Math.max(0, Math.round(Number(parsed.carbs) || 0)),
+    fat: Math.max(0, Math.round(Number(parsed.fat) || 0)),
+  };
+}
+
 export interface SwapMealRequest {
   countryName: string;
   mealName: string;        // Breakfast / Lunch / Snack / Dinner
@@ -192,6 +219,51 @@ Return ONLY valid JSON:
   const food = sanitizeFood(parsed);
   if (food) food.isCustom = true;
   return food;
+}
+
+export interface RebalanceRequest {
+  countryName: string;
+  remainingMeals: string[];   // meal slot names still to eat, e.g. ["Lunch","Dinner"]
+  remainingKcal: number;      // budget left for the day
+  remainingProtein: number;
+  likedFoods: string[];
+  restrictions: string[];
+}
+
+/** Regenerate only the not-yet-eaten meals to fit the day's remaining budget. One call. */
+export async function rebalanceDay(req: RebalanceRequest): Promise<PlannedMeal[]> {
+  const perMeal = Math.max(1, req.remainingMeals.length);
+  const prompt = `You are a nutritionist rescuing a day that went off-plan in ${req.countryName}.
+The user has ${req.remainingKcal} kcal and ${req.remainingProtein}g protein left for the
+rest of today across these meals: ${req.remainingMeals.join(', ')}.
+
+Rules:
+- The ${req.remainingMeals.length} meals together must total close to the remaining budget
+  (±8% kcal). If the budget is very low, make light meals — that's the point.
+- Build ONLY from: ${req.likedFoods.join('; ')}
+- NEVER violate: ${req.restrictions.length ? req.restrictions.join(', ') : 'no restrictions'}
+- Concrete quantities on every item.
+
+Return ONLY JSON:
+{ "meals": [ { "name": "${req.remainingMeals[0] ?? 'Meal'}", "title": "Dish",
+  "items": ["qty + food"], "kcal": 0, "protein": 0, "carbs": 0, "fat": 0 } ] }
+Exactly ${perMeal} meals, one per slot in order.`;
+
+  const parsed = await generateJSON<{ meals: PlannedMeal[] }>({
+    system: prompt,
+    user: 'Rebalance the rest of my day',
+    maxTokens: 2048,
+    validate: p => Array.isArray(p?.meals) && p.meals.length === perMeal,
+  });
+  return parsed.meals.map((m, i) => ({
+    name: req.remainingMeals[i] ?? String(m.name ?? 'Meal'),
+    title: String(m.title ?? 'Meal'),
+    items: Array.isArray(m.items) ? m.items.map(String) : [],
+    kcal: Math.max(0, Math.round(Number(m.kcal) || 0)),
+    protein: Math.max(0, Math.round(Number(m.protein) || 0)),
+    carbs: Math.max(0, Math.round(Number(m.carbs) || 0)),
+    fat: Math.max(0, Math.round(Number(m.fat) || 0)),
+  }));
 }
 
 export interface MealPlanRequest {

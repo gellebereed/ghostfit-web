@@ -1,0 +1,17 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { rebalanceDay, RebalanceRequest } from '@/services/nutritionist';
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = (await request.json()) as RebalanceRequest;
+    if (!body.remainingMeals?.length || !body.likedFoods?.length) {
+      return NextResponse.json({ error: 'remainingMeals and likedFoods required' }, { status: 400 });
+    }
+    const meals = await rebalanceDay(body);
+    return NextResponse.json({ meals });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Error rebalancing day';
+    console.error('Rebalance day API error:', message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

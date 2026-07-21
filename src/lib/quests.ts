@@ -91,6 +91,31 @@ export async function createQuest(opts: {
   return data.id;
 }
 
+export async function updateQuest(questId: string, patch: {
+  title?: string; why?: string; questType?: QuestType; targetDate?: string | null;
+}): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const row: Record<string, any> = {};
+  if (patch.title !== undefined) row.title = patch.title;
+  if (patch.why !== undefined) row.why = patch.why;
+  if (patch.questType !== undefined) row.quest_type = patch.questType;
+  if (patch.targetDate !== undefined) row.target_date = patch.targetDate;
+  const { error } = await supabase.from('quests').update(row).eq('id', questId);
+  return !error;
+}
+
+export async function updateTask(taskId: string, patch: {
+  title?: string; priority?: number; doDate?: string | null;
+}): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const row: Record<string, any> = {};
+  if (patch.title !== undefined) row.title = patch.title;
+  if (patch.priority !== undefined) row.priority = patch.priority;
+  if (patch.doDate !== undefined) row.do_date = patch.doDate;
+  const { error } = await supabase.from('quest_tasks').update(row).eq('id', taskId);
+  return !error;
+}
+
 export async function addTask(opts: {
   questId: string | null;
   title: string;

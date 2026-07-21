@@ -216,6 +216,7 @@ export interface MealLog {
   protein: number;
   carbs: number;
   fat: number;
+  note?: string | null;  // set when the user ate something off-plan
 }
 
 // ─── Social Layer ────────────────────────────────────────────────────────────

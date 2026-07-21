@@ -8,9 +8,9 @@ import { saveProfile } from '@/lib/db';
 import { FoodItem, MealLog, MealPlan, NutritionProfile, PlannedMeal } from '@/lib/types';
 import {
   getCurrentMealPlan, getFoodCatalog, getMealRecipe, getNutritionProfile,
-  getTodayLogs, getWeekAdherence, isCheckinDue, logMeal, MealRecipe,
+  getTodayLogs, getWeekAdherence, isCheckinDue, logMeal, logOffPlanMeal, MealRecipe,
   replaceMealInPlan, requestMealPlan, requestSwapMeal, saveMealPlan,
-  saveNutritionProfile, computeTargets,
+  saveMealPlanDays, saveNutritionProfile, computeTargets,
 } from '@/lib/nutrition';
 
 const MEAL_EMOJI: Record<string, string> = {
@@ -45,6 +45,14 @@ export default function NutritionPage() {
   // Swap state
   const [swapping, setSwapping] = useState<string | null>(null); // `${day}-${meal}`
   const [swapError, setSwapError] = useState<string | null>(null);
+
+  // Off-plan logging
+  const [offPlanFor, setOffPlanFor] = useState<number | null>(null);
+  const [offPlanText, setOffPlanText] = useState('');
+  const [analyzing, setAnalyzing] = useState(false);
+  const [offPlanError, setOffPlanError] = useState<string | null>(null);
+  const [rebalancing, setRebalancing] = useState(false);
+  const [rebalanceDone, setRebalanceDone] = useState(false);
 
   // Check-in state
   const [checkinOpen, setCheckinOpen] = useState(false);
@@ -116,6 +124,64 @@ export default function NutritionPage() {
       setRecipe(await getMealRecipe(meal, np?.countryName));
     } catch (e) {
       setRecipeError(e instanceof Error ? e.message : 'Recipe failed');
+    }
+  }
+
+  async function handleLogOffPlan(mealIndex: number) {
+    if (!offPlanText.trim() || analyzing) return;
+    setAnalyzing(true);
+    setOffPlanError(null);
+    try {
+      const meal = await logOffPlanMeal(mealIndex, plan!.days[todayIdx].meals[mealIndex].name, offPlanText.trim());
+      setLogs(prev => [
+        ...prev.filter(l => l.mealIndex !== mealIndex),
+        { logDate: '', mealIndex, status: 'ate', kcal: meal.kcal, protein: meal.protein, carbs: meal.carbs, fat: meal.fat, note: offPlanText.trim() },
+      ]);
+      setOffPlanFor(null);
+      setOffPlanText('');
+    } catch (e) {
+      setOffPlanError(e instanceof Error ? e.message : 'Analysis failed');
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  async function handleRebalance() {
+    if (!plan || !np || rebalancing) return;
+    setRebalancing(true);
+    try {
+      const meals = plan.days[todayIdx].meals;
+      const remainingIdx = meals.map((_, i) => i).filter(i => !logs.some(l => l.mealIndex === i));
+      if (remainingIdx.length === 0) { setRebalancing(false); return; }
+      const remainingKcal = Math.max(200, (np.targetKcal ?? 0) - kcalEaten);
+      const remainingProtein = Math.max(0, (np.targetProtein ?? 0) - proteinEaten);
+      const cat = await ensureCatalog();
+      const byId = new Map<string, typeof cat[number]>();
+      [...cat, ...np.customFoods].forEach(f => byId.set(f.id, f));
+      const liked = np.likedIds.map(id => byId.get(id)).filter(Boolean).map(f => `${f!.name} (${f!.serving}: ${f!.kcal}kcal, ${f!.protein}g P)`);
+
+      const res = await fetch('/api/rebalance-day', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          countryName: np.countryName,
+          remainingMeals: remainingIdx.map(i => meals[i].name),
+          remainingKcal, remainingProtein,
+          likedFoods: liked, restrictions: np.restrictions,
+        }),
+      });
+      if (!res.ok) throw new Error('rebalance failed');
+      const { meals: newMeals } = await res.json();
+      let updated = plan;
+      remainingIdx.forEach((slot, k) => {
+        if (newMeals[k]) updated = { ...updated, days: updated.days.map((d, di) => di !== todayIdx ? d : { ...d, meals: d.meals.map((m, mi) => mi === slot ? newMeals[k] : m) }) };
+      });
+      await saveMealPlanDays(updated.id, updated.days);
+      setPlan(updated);
+      setRebalanceDone(true);
+    } catch {
+      /* stay silent — the log already succeeded */
+    } finally {
+      setRebalancing(false);
     }
   }
 
@@ -199,6 +265,12 @@ export default function NutritionPage() {
   const fatEaten = eaten.reduce((a, l) => a + l.fat, 0);
   const kcalPct = np?.targetKcal ? Math.min(100, (kcalEaten / np.targetKcal) * 100) : 0;
   const checkinDue = isCheckinDue(plan);
+
+  // Off-plan rescue: if today's projected total blows past target and meals remain, offer a rebalance
+  const todayMeals = plan?.days[todayIdx]?.meals ?? [];
+  const remainingPlannedKcal = todayMeals.reduce((a, m, i) => a + (logs.some(l => l.mealIndex === i) ? 0 : m.kcal), 0);
+  const hasRemainingMeals = todayMeals.some((_, i) => !logs.some(l => l.mealIndex === i));
+  const overBudget = !!np?.targetKcal && hasRemainingMeals && (kcalEaten + remainingPlannedKcal) > np.targetKcal * 1.12;
 
   // Calorie ring geometry
   const R = 52;
@@ -288,6 +360,24 @@ export default function NutritionPage() {
 
         {swapError && <p className="arena-error">{swapError}</p>}
 
+        {/* Off-plan rescue */}
+        {isToday && overBudget && !rebalanceDone && (
+          <div className="rebalance-banner">
+            <div>
+              <strong>Day&apos;s running over budget</strong>
+              <p className="arena-card-sub">You&apos;re on track for ~{kcalEaten + remainingPlannedKcal} kcal vs your {np?.targetKcal} target. Want me to lighten your remaining meals to fit?</p>
+            </div>
+            <button className="arena-btn accept" disabled={rebalancing} onClick={handleRebalance}>
+              {rebalancing ? 'REBALANCING…' : 'REBALANCE ⚖️'}
+            </button>
+          </div>
+        )}
+        {isToday && rebalanceDone && (
+          <p className="arena-card-sub" style={{ textAlign: 'center', color: 'var(--accent)' }}>
+            ⚖️ Rest of today rebalanced to keep you on target.
+          </p>
+        )}
+
         {/* Meals for the viewed day */}
         {viewMeals ? viewMeals.map((meal, i) => {
           const log = isToday ? logs.find(l => l.mealIndex === i) : undefined;
@@ -318,14 +408,39 @@ export default function NutritionPage() {
               </div>
               {isToday && (log ? (
                 <p className={`meal-card-logged ${log.status}`}>
-                  {log.status === 'ate' ? '✓ Eaten — logged' : 'Skipped'}
+                  {log.status === 'ate'
+                    ? (log.note ? `✓ Ate off-plan: ${log.note.length > 40 ? log.note.slice(0, 40) + '…' : log.note} · ${log.kcal} kcal` : '✓ Ate as planned')
+                    : 'Skipped'}
                   <button className="meal-undo" onClick={() => handleLog(i, log.status === 'ate' ? 'skipped' : 'ate')}>undo</button>
                 </p>
-              ) : (
-                <div className="arena-actions">
-                  <button className="arena-btn accept" onClick={() => handleLog(i, 'ate')}>ATE IT ✓</button>
-                  <button className="arena-btn decline" onClick={() => handleLog(i, 'skipped')}>SKIPPED</button>
+              ) : offPlanFor === i ? (
+                <div className="offplan-box">
+                  <p className="sheet-label" style={{ marginTop: 0 }}>WHAT DID YOU ACTUALLY EAT?</p>
+                  <textarea
+                    className="arena-input" rows={2} autoFocus
+                    style={{ width: '100%', letterSpacing: 0, textTransform: 'none', fontWeight: 500, fontSize: 14, resize: 'none', fontFamily: 'inherit' }}
+                    placeholder="e.g. 2 slices of pizza and a can of coke"
+                    value={offPlanText}
+                    onChange={e => setOffPlanText(e.target.value)}
+                  />
+                  {offPlanError && <p className="arena-error">{offPlanError}</p>}
+                  <div className="arena-actions" style={{ marginTop: 8 }}>
+                    <button className="arena-btn accept" disabled={analyzing || !offPlanText.trim()} onClick={() => handleLogOffPlan(i)}>
+                      {analyzing ? 'ANALYZING…' : 'ANALYZE & LOG ✨'}
+                    </button>
+                    <button className="arena-btn decline" onClick={() => { setOffPlanFor(null); setOffPlanText(''); setOffPlanError(null); }}>CANCEL</button>
+                  </div>
                 </div>
+              ) : (
+                <>
+                  <div className="arena-actions">
+                    <button className="arena-btn accept" onClick={() => handleLog(i, 'ate')}>ATE IT ✓</button>
+                    <button className="arena-btn decline" onClick={() => handleLog(i, 'skipped')}>SKIPPED</button>
+                  </div>
+                  <button className="offplan-link" onClick={() => { setOffPlanFor(i); setOffPlanText(''); setOffPlanError(null); }}>
+                    ✏️ Ate something else instead
+                  </button>
+                </>
               ))}
             </div>
           );

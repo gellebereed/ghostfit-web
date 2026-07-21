@@ -340,6 +340,9 @@ create table if not exists meal_logs (
   unique (user_id, log_date, meal_index)
 );
 
+-- Off-plan note: what the user actually ate when they went off the plan
+alter table meal_logs add column if not exists note text;
+
 alter table food_catalogs enable row level security;
 alter table nutrition_profiles enable row level security;
 alter table meal_plans enable row level security;

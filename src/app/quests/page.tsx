@@ -7,7 +7,7 @@ import {
 } from '@/lib/types';
 import {
   addTask, closeQuest, createQuest, deleteTask, getQuests, questProgress,
-  selectTodayTasks, toggleTask,
+  selectTodayTasks, toggleTask, updateQuest, updateTask,
 } from '@/lib/quests';
 import {
   addHabits, getHabits, Habit, PRESET_HABITS, removeHabit, toggleHabit,
@@ -41,8 +41,10 @@ export default function QuestsPage() {
   const [habitEdit, setHabitEdit] = useState(false);
   const [newHabit, setNewHabit] = useState('');
 
-  // New quest sheet
+  // New / edit quest sheet
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTask, setEditingTask] = useState<string | null>(null);
   const [qTitle, setQTitle] = useState('');
   const [qWhy, setQWhy] = useState('');
   const [qType, setQType] = useState<QuestType>('monthly');
@@ -111,6 +113,41 @@ export default function QuestsPage() {
     if (!title) return;
     await addTask({ questId, title });
     setNewTaskTitles(prev => ({ ...prev, [questId]: '' }));
+    await load();
+  }
+
+  function openEdit(q: Quest) {
+    setEditingId(q.id);
+    setQTitle(q.title);
+    setQWhy(q.why);
+    setQType(q.questType);
+    setQTarget(q.targetDate ?? '');
+    setQParent(q.parentId ?? '');
+    setSuggested(null);
+    setSheetOpen(true);
+  }
+
+  async function handleSaveEdit() {
+    if (!editingId || !qTitle.trim() || creating) return;
+    setCreating(true);
+    await updateQuest(editingId, {
+      title: qTitle.trim(), why: qWhy.trim(), questType: qType, targetDate: qTarget || null,
+    });
+    setCreating(false);
+    setSheetOpen(false);
+    setEditingId(null);
+    setQTitle(''); setQWhy(''); setQTarget('');
+    await load();
+  }
+
+  async function cycleTaskPriority(t: QuestTask) {
+    const next = t.priority === 1 ? 2 : t.priority === 2 ? 3 : 1;
+    await updateTask(t.id, { priority: next });
+    await load();
+  }
+
+  async function rescheduleTask(t: QuestTask, date: string) {
+    await updateTask(t.id, { doDate: date || null });
     await load();
   }
 
@@ -208,6 +245,18 @@ export default function QuestsPage() {
       </header>
 
       <div className="arena-body">
+        {activeQuests.length > 0 && (
+          <div className="aspire-banner">
+            <span className="aspire-count">{activeQuests.length}</span>
+            <div>
+              <strong>{activeQuests.length === 1 ? 'quest' : 'quests'} you&apos;re thriving toward</strong>
+              <p className="arena-card-sub">
+                {todayTasks.length > 0 ? `${todayTasks.length} ${todayTasks.length === 1 ? 'move' : 'moves'} due today. Chip away.` : 'Nothing due today — plan your next move below.'}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* DAILY RHYTHM — deen & body daily practices */}
         <div className="rhythm-card">
           <div className="arena-card-top">
@@ -331,6 +380,7 @@ export default function QuestsPage() {
                       <div className="quest-card-info">
                         <p className="quest-card-title">{q.title}</p>
                         {parent && <p className="quest-card-parent">↳ {parent.title}</p>}
+                        {q.why && !isOpen && <p className="quest-card-whypeek">{q.why}</p>}
                         <p className="task-meta">
                           {prog.total > 0 ? `${prog.done}/${prog.total} tasks` : 'no tasks yet'}
                           {q.targetDate && ` · ${daysUntil(q.targetDate)}`}
@@ -346,20 +396,31 @@ export default function QuestsPage() {
                       <div className="quest-card-body">
                         {q.why && <p className="quest-why">&quot;{q.why}&quot;</p>}
                         {q.tasks.map(t => (
-                          <div className={`task-row ${t.isDone ? 'done' : ''}`} key={t.id}>
-                            <button
-                              className={`task-check ${t.isDone ? 'checked' : ''}`}
-                              onClick={() => handleToggle(t)}
-                              aria-label="toggle task"
-                            >{t.isDone ? '✓' : ''}</button>
-                            <div className="task-body">
-                              <span className="task-title">{t.title}</span>
-                              <span className="task-meta">
-                                <span style={{ color: TASK_PRIORITY_META[t.priority].color }}>{TASK_PRIORITY_META[t.priority].label}</span>
-                                {t.doDate && <> · {daysUntil(t.doDate)}</>}
-                              </span>
+                          <div key={t.id}>
+                            <div className={`task-row ${t.isDone ? 'done' : ''}`}>
+                              <button
+                                className={`task-check ${t.isDone ? 'checked' : ''}`}
+                                onClick={() => handleToggle(t)}
+                                aria-label="toggle task"
+                              >{t.isDone ? '✓' : ''}</button>
+                              <div className="task-body" onClick={() => setEditingTask(editingTask === t.id ? null : t.id)} style={{ cursor: 'pointer' }}>
+                                <span className="task-title">{t.title}</span>
+                                <span className="task-meta">
+                                  <span style={{ color: TASK_PRIORITY_META[t.priority].color }}>{TASK_PRIORITY_META[t.priority].label}</span>
+                                  {t.doDate && <> · {daysUntil(t.doDate)}</>}
+                                </span>
+                              </div>
+                              <button className="task-delete" onClick={() => setEditingTask(editingTask === t.id ? null : t.id)} aria-label="edit task">⋯</button>
                             </div>
-                            <button className="task-delete" onClick={() => deleteTask(t.id).then(load)} aria-label="delete task">✕</button>
+                            {editingTask === t.id && (
+                              <div className="task-edit">
+                                <button className="task-edit-pri" style={{ color: TASK_PRIORITY_META[t.priority].color, borderColor: TASK_PRIORITY_META[t.priority].color }} onClick={() => cycleTaskPriority(t)}>
+                                  {TASK_PRIORITY_META[t.priority].label} ↻
+                                </button>
+                                <input type="date" className="task-edit-date" value={t.doDate ?? ''} onChange={e => rescheduleTask(t, e.target.value)} />
+                                <button className="task-edit-del" onClick={() => deleteTask(t.id).then(load)}>Delete</button>
+                              </div>
+                            )}
                           </div>
                         ))}
                         <div className="arena-code-row">
@@ -373,6 +434,7 @@ export default function QuestsPage() {
                           />
                           <button className="arena-btn accept" onClick={() => handleAddToQuest(q.id)}>+</button>
                         </div>
+                        <button className="quest-edit-btn" onClick={() => openEdit(q)}>✏️ Edit goal details</button>
                         <div className="arena-actions">
                           <button className="arena-btn accept" onClick={() => handleComplete(q)}>
                             COMPLETE {QUEST_TYPE_META[q.questType].emoji} +{QUEST_TYPE_META[q.questType].reward}
@@ -412,11 +474,11 @@ export default function QuestsPage() {
         )}
       </div>
 
-      {/* New quest sheet */}
+      {/* New / edit quest sheet */}
       {sheetOpen && (
-        <div className="sheet-overlay" onClick={() => setSheetOpen(false)}>
+        <div className="sheet-overlay" onClick={() => { setSheetOpen(false); setEditingId(null); }}>
           <div className="sheet" onClick={e => e.stopPropagation()}>
-            <h3 className="sheet-title">NEW QUEST</h3>
+            <h3 className="sheet-title">{editingId ? 'EDIT QUEST' : 'NEW QUEST'}</h3>
 
             <p className="sheet-label">WHAT&apos;S THE GOAL?</p>
             <input
@@ -460,7 +522,7 @@ export default function QuestsPage() {
               </>
             )}
 
-            {!suggested && (
+            {!editingId && !suggested && (
               <button
                 className="arena-btn accept" style={{ width: '100%', marginTop: 16, padding: 14 }}
                 disabled={!qTitle.trim() || breakingDown}
@@ -470,7 +532,7 @@ export default function QuestsPage() {
               </button>
             )}
 
-            {suggested && (
+            {!editingId && suggested && (
               <>
                 <p className="sheet-label">SUGGESTED FIRST TASKS (tap to include/exclude)</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -493,8 +555,8 @@ export default function QuestsPage() {
               </>
             )}
 
-            <button className="btn-primary" style={{ marginTop: 16 }} disabled={!qTitle.trim() || creating} onClick={handleCreateQuest}>
-              {creating ? 'CREATING...' : 'START QUEST 🎯'}
+            <button className="btn-primary" style={{ marginTop: 16 }} disabled={!qTitle.trim() || creating} onClick={editingId ? handleSaveEdit : handleCreateQuest}>
+              {creating ? 'SAVING...' : editingId ? 'SAVE CHANGES ✓' : 'START QUEST 🎯'}
             </button>
           </div>
         </div>

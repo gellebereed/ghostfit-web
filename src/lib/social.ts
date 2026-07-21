@@ -409,3 +409,14 @@ export async function syncChallenges(): Promise<{ challenges: Challenge[]; verdi
 export async function getMyUserId(): Promise<string | null> {
   return uid();
 }
+
+/** Light count for the dashboard — no settlement side effects. */
+export async function getActiveChallengeCount(): Promise<number> {
+  const me = await uid();
+  if (!me) return 0;
+  const { count } = await supabase
+    .from('challenges')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'active');
+  return count ?? 0;
+}
