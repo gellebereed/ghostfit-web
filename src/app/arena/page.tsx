@@ -1,5 +1,6 @@
 'use client';
 import BottomNav from '@/components/BottomNav';
+import Celebration from '@/components/Celebration';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAppStore } from '@/store/appStore';
@@ -168,6 +169,7 @@ export default function ArenaPage() {
     <>
       {verdict && (
         <div className="verdict-overlay">
+          {verdict.outcome === 'win' && <Celebration big />}
           <div className={`verdict-card ${verdict.outcome}`}>
             <div className="verdict-emoji">
               {verdict.outcome === 'win' ? '🏆' : verdict.outcome === 'tie' ? '🤝' : '💀'}

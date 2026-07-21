@@ -1,4 +1,34 @@
-// Phase 4 UI system: aura-tinted theming + duotone focus heroes
+// UI system: base themes + aura-tinted accents + duotone focus heroes
+
+export interface BaseTheme {
+  id: string;
+  name: string;
+  tagline: string;
+  swatch: [string, string]; // preview gradient
+}
+
+export const BASE_THEMES: BaseTheme[] = [
+  { id: 'shadow',   name: 'Shadow',   tagline: 'Pure black. Classic GhostFit.', swatch: ['#0A0A0A', '#1C1C1C'] },
+  { id: 'abyss',    name: 'Abyss',    tagline: 'Deep ocean blues. Calm focus.', swatch: ['#070B14', '#16203A'] },
+  { id: 'royale',   name: 'Royale',   tagline: 'Midnight purple. Main character.', swatch: ['#0B0714', '#1E1433'] },
+  { id: 'ember',    name: 'Ember',    tagline: 'Forged in fire. All heat.', swatch: ['#120806', '#2A1712'] },
+  { id: 'jade',     name: 'Jade',     tagline: 'Deep forest. Steady growth.', swatch: ['#06110C', '#12271D'] },
+  { id: 'daylight', name: 'Daylight', tagline: 'Bright mode. Train in the sun.', swatch: ['#F4F5F7', '#DDE1E7'] },
+];
+
+const THEME_KEY = 'ghostfit_theme';
+
+export function getSavedTheme(): string {
+  if (typeof window === 'undefined') return 'shadow';
+  return localStorage.getItem(THEME_KEY) ?? 'shadow';
+}
+
+export function applyBaseTheme(themeId: string) {
+  if (typeof document === 'undefined') return;
+  const valid = BASE_THEMES.some(t => t.id === themeId) ? themeId : 'shadow';
+  document.documentElement.dataset.theme = valid;
+  localStorage.setItem(THEME_KEY, valid);
+}
 
 /** Tint the whole UI to the user's chosen aura color. */
 export function applyAuraTheme(color?: string | null) {

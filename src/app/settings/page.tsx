@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { getProfile, saveProfile, savePlan } from '@/lib/db';
 import { getAppSettings, saveSettings } from '@/lib/sound';
 import { supabase } from '@/lib/supabase';
+import { applyBaseTheme, BASE_THEMES, getSavedTheme } from '@/lib/theme';
 
 const GOALS = [
   { id: 'shredded', icon: '🔥', title: 'Get Shredded' },
@@ -27,6 +28,7 @@ export default function SettingsPage() {
   const [showRegenConfirm, setShowRegenConfirm] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [commitmentTime, setCommitmentTime] = useState('');
+  const [theme, setTheme] = useState('shadow');
 
   useEffect(() => {
     loadData();
@@ -43,6 +45,12 @@ export default function SettingsPage() {
     setSoundOn(s.soundEnabled);
     setHapticOn(s.hapticEnabled);
     setRestStretch(s.restDayStretch);
+    setTheme(getSavedTheme());
+  }
+
+  function changeTheme(id: string) {
+    setTheme(id);
+    applyBaseTheme(id);
   }
 
   function toggleSound() {
@@ -167,6 +175,29 @@ export default function SettingsPage() {
         <div className="settings-row" onClick={() => setShowGoalPicker(true)}>
           <div className="row-left">{goalInfo?.icon} {goalInfo?.title || 'Set Goal'}</div>
           <div className="row-right">Change →</div>
+        </div>
+      </div>
+
+      {/* Appearance */}
+      <div className="settings-section">
+        <div className="settings-section-title">APPEARANCE</div>
+        <p style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 10 }}>
+          Your aura color comes from your avatar. Pick the world it lives in.
+        </p>
+        <div className="theme-picker">
+          {BASE_THEMES.map(t => (
+            <button
+              key={t.id}
+              className={`theme-card ${theme === t.id ? 'active' : ''}`}
+              onClick={() => changeTheme(t.id)}
+            >
+              <span className="theme-swatch" style={{ background: `linear-gradient(135deg, ${t.swatch[0]}, ${t.swatch[1]})` }}>
+                <span className="theme-swatch-dot" />
+              </span>
+              <strong>{t.name}</strong>
+              <span className="theme-tagline">{t.tagline}</span>
+            </button>
+          ))}
         </div>
       </div>
 

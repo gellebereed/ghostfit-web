@@ -13,6 +13,7 @@ import {
   addHabits, getHabits, Habit, PRESET_HABITS, removeHabit, toggleHabit,
 } from '@/lib/habits';
 import { SuggestedTask } from '@/services/questCoach';
+import Celebration from '@/components/Celebration';
 
 const TYPE_ORDER: QuestType[] = ['north_star', 'quarterly', 'monthly'];
 
@@ -183,6 +184,7 @@ export default function QuestsPage() {
     <>
       {celebration && (
         <div className="verdict-overlay" onClick={() => setCelebration(null)}>
+          <Celebration big />
           <div className="verdict-card win">
             <div className="verdict-emoji">{QUEST_TYPE_META[celebration.quest.questType].emoji}</div>
             <h2 className="verdict-title">QUEST COMPLETE</h2>

@@ -9,6 +9,7 @@ import { SmartLogger } from '@/components/SmartLogger';
 import { checkMilestones, MilestoneEvent } from '@/lib/milestones';
 import { playSetComplete, playGhostBeaten, playGiveUp, playMilestone, hapticSetComplete, hapticGhostBeaten, hapticGiveUp, hapticMilestone } from '@/lib/sound';
 import { arcadeSounds, initAudio } from '@/utils/arcadeSounds';
+import Celebration from '@/components/Celebration';
 
 function ComboAnnouncer({ combo }: { combo: number | null }) {
   if (!combo || combo < 2) return null;
@@ -97,6 +98,7 @@ function ExerciseContent() {
   // UI state
   const [showGiveUp, setShowGiveUp] = useState(false);
   const [result, setResult] = useState<'win' | 'loss' | 'first' | null>(null);
+  const [prNew, setPrNew] = useState(false);
   const [arenaShake, setArenaShake] = useState(false);
   const [flash, setFlash] = useState(false);
   const [justScored, setJustScored] = useState(false);
@@ -375,6 +377,7 @@ function ExerciseContent() {
 
     if (won) { playGhostBeaten(); hapticGhostBeaten(); if (soundEnabled) arcadeSounds.ghostBeaten(); }
     if (isNewPR && soundEnabled) arcadeSounds.newRecord();
+    setPrNew(isNewPR);
 
     // Check milestones (Upgrade 8)
     const allSessions = await getAllSessions();
@@ -472,7 +475,9 @@ function ExerciseContent() {
       {/* Result overlays */}
       {result && !milestone && (
         <div className={`result-overlay ${result === 'loss' ? 'loss-overlay' : 'win-overlay'}`}>
-          <div className="result-icon">{result === 'win' ? '🔥' : result === 'first' ? '👻' : '💀'}</div>
+          {result !== 'loss' && <Celebration big={prNew} />}
+          <div className="result-icon">{result === 'win' ? (prNew ? '🏆' : '🔥') : result === 'first' ? '👻' : '💀'}</div>
+          {prNew && result === 'win' && <div className="pr-banner">NEW PERSONAL RECORD</div>}
           <h2>{result === 'win' ? 'YOU BEAT YOUR GHOST' : result === 'first' ? 'GHOST DATA SAVED' : 'GHOST WINS TODAY'}</h2>
           <p>{result === 'win' ? `+${myScore - ghostTarget} ${isCardio ? 'seconds' : 'reps'} more than last time!`
             : result === 'first' ? 'Beat this next time you do this exercise.'

@@ -5,6 +5,7 @@ import { Avatar } from './Avatar';
 import { calculateCaloriesBurned, getDisplayCalories } from '@/utils/calorieCalculator';
 import { ChestDrop, chestMeta } from '@/lib/chest';
 import { arcadeSounds } from '@/utils/arcadeSounds';
+import Celebration from './Celebration';
 
 interface PostWorkoutRecapProps {
   workoutResult: 'win' | 'loss';
@@ -104,9 +105,10 @@ export default function PostWorkoutRecap({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/90 flex flex-col 
+    <div className="fixed inset-0 z-50 bg-black/90 flex flex-col
                     items-center justify-center p-4 overflow-y-auto">
-      
+      {isWin && <Celebration />}
+
       {/* THE SHAREABLE CARD */}
       <div
         ref={cardRef}
