@@ -59,14 +59,94 @@ input, textarea { user-select:text; }
 .hdr-back:focus-visible,.btn-primary:focus-visible,.btn-outline:focus-visible,.btn-ghost:focus-visible,.nav-item:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
 
 /* Buttons */
-.btn-primary{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:18px;background:var(--accent);border:none;border-radius:var(--r);color:#000;font-size:16px;font-weight:800;letter-spacing:2px;text-transform:uppercase;cursor:pointer;font-family:inherit;transition:var(--t);}
-.btn-primary:hover{background:var(--accent-dim);transform:translateY(-1px);box-shadow:0 8px 30px var(--accent-glow2);}
-.btn-primary:active{transform:scale(0.98);}
-.btn-primary:disabled{opacity:0.4;cursor:not-allowed;transform:none;}
-.btn-outline{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:16px;background:transparent;border:2px solid var(--accent);border-radius:var(--r);color:var(--accent);font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;font-family:inherit;transition:var(--t);}
-.btn-outline:hover{background:var(--accent-glow);}
-.btn-ghost{background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;font-family:inherit;padding:8px;transition:var(--t);}
-.btn-ghost:hover{color:var(--text2);}
+.btn-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 18px;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--r);
+  color: #000000 !important;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  font-family: inherit;
+  transition: var(--t);
+  box-shadow: 0 4px 20px rgba(0, 255, 135, 0.25);
+}
+
+.btn-primary:hover {
+  background: #00e67a !important;
+  color: #000000 !important;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0, 255, 135, 0.45);
+}
+
+.btn-primary:active,
+.btn-primary:focus-visible {
+  background: #00cc6a !important;
+  color: #000000 !important;
+  transform: scale(0.98);
+}
+
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-outline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 16px;
+  background: transparent;
+  border: 2px solid var(--accent);
+  border-radius: var(--r);
+  color: var(--accent) !important;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  font-family: inherit;
+  transition: var(--t);
+}
+
+.btn-outline:hover {
+  background: rgba(0, 255, 135, 0.15) !important;
+  color: var(--accent) !important;
+  border-color: var(--accent) !important;
+}
+
+.btn-outline:active {
+  background: rgba(0, 255, 135, 0.25) !important;
+  color: var(--accent) !important;
+}
+
+.btn-ghost {
+  background: none;
+  border: none;
+  color: var(--text2) !important;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 8px;
+  transition: var(--t);
+}
+
+.btn-ghost:hover {
+  color: #FFFFFF !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-radius: var(--rs);
+}
 
 /* Cards */
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;transition:var(--t);}
@@ -757,12 +837,18 @@ input, textarea { user-select:text; }
 .install-btn{background:var(--accent);color:#000;border:none;border-radius:20px;padding:8px 16px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;}
 @keyframes slideUp { from{transform:translateY(100px);opacity:0;} to{transform:translateY(0);opacity:1;} }
 
-/* Fixing mobile double-tap by removing hover states on touch devices */
+/* Touch device optimization — maintain high-contrast button states */
 @media (hover: none) {
-  .btn-primary:hover, .btn-secondary:hover, .auth-tab:hover, .auth-google-btn:hover, .nav-item:hover, .auth-signout-btn:hover {
-    transform: none !important;
-    box-shadow: none !important;
-    background: inherit;
+  .btn-primary:hover,
+  .btn-primary:active {
+    background: var(--accent) !important;
+    color: #000000 !important;
+    box-shadow: 0 4px 15px rgba(0, 255, 135, 0.3) !important;
+  }
+  .btn-secondary:hover,
+  .btn-secondary:active {
+    background: var(--surface2) !important;
+    color: var(--text) !important;
   }
 }
 
