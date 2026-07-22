@@ -2417,3 +2417,145 @@ button{transition:transform 0.15s ease,opacity 0.15s ease,background 0.2s ease,b
   }
 }
 
+/* ==========================================================================
+   WORLD CLASS ONBOARDING RESPONSIVE LAYOUT & CENTERING
+   ========================================================================== */
+
+/* Force standalone flows to be centered on desktop, removing sidebar push */
+.app:has(.onb-shell),
+.app:has(.login-portal),
+.onb-shell,
+.login-portal {
+  margin-left: auto !important;
+  margin-right: auto !important;
+  left: 0 !important;
+}
+
+.onb-shell {
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto !important;
+  min-height: 100dvh;
+  padding: 24px 20px 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.onb-header {
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+}
+
+.onb-back {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  cursor: pointer;
+  transition: var(--t);
+}
+
+.onb-back:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.onb-back:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.onb-step-count {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--text2);
+}
+
+.onb-progress-track {
+  width: 100%;
+  max-width: 600px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  margin: 0 auto 32px;
+  overflow: hidden;
+}
+
+.onb-progress-track span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent) 0%, #60EFFF 100%);
+  border-radius: 10px;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 12px rgba(0, 255, 135, 0.4);
+}
+
+.onb-stage {
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.onb-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2.5px;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.onb-title {
+  font-size: 32px;
+  font-weight: 900;
+  line-height: 1.25;
+  color: #FFFFFF;
+  margin-bottom: 8px;
+}
+
+.onb-sub {
+  font-size: 14px;
+  color: var(--text2);
+  margin-bottom: 28px;
+  line-height: 1.5;
+}
+
+.onb-actions {
+  position: fixed;
+  z-index: 90;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(100%, 680px);
+  padding: 16px 20px calc(16px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, transparent 0%, #06090F 30%);
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.onb-actions .btn-primary {
+  max-width: 600px;
+  width: 100%;
+}
+
+

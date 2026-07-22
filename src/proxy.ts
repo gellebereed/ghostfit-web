@@ -41,11 +41,34 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Logged in but hitting /login → redirect to home
-  if (user && pathname === '/login') {
-    const url = request.nextUrl.clone();
-    url.pathname = '/';
-    return NextResponse.redirect(url);
+  // Logged in user routing checks
+  if (user) {
+    // Check onboarding status for login or home page visits
+    if (pathname === '/login' || pathname === '/') {
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('onboarding_complete')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        const isOnboardingComplete = profile?.onboarding_complete ?? false;
+
+        if (!isOnboardingComplete) {
+          const url = request.nextUrl.clone();
+          url.pathname = '/onboarding';
+          return NextResponse.redirect(url);
+        }
+
+        if (isOnboardingComplete && pathname === '/login') {
+          const url = request.nextUrl.clone();
+          url.pathname = '/';
+          return NextResponse.redirect(url);
+        }
+      } catch {
+        // Fall back gracefully if table isn't ready
+      }
+    }
   }
 
   return supabaseResponse;

@@ -73,11 +73,12 @@ export default function HomePage() {
     async function init() {
       try {
         await refreshProfile();
-        const p = await getCurrentPlan();
-        
-        // We need to check store after refresh
         const currentProfile = useAppStore.getState().profile;
-        if (!currentProfile?.onboardingComplete) { router.replace('/onboarding'); return; }
+        if (!currentProfile?.onboardingComplete) {
+          router.replace('/onboarding');
+          return;
+        }
+        const p = await getCurrentPlan();
 
         const [result, wc, s, sessions] = await Promise.all([
           getYesterdayResult(),
