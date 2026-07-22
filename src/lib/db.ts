@@ -381,37 +381,67 @@ export async function getWinCount(): Promise<number> {
 }
 
 export async function getStreak(): Promise<number> {
-  if (memoryCache.streak !== undefined) return memoryCache.streak;
-
   const CACHE_KEY = 'ghostfit_streak';
-  const cached = localStorage.getItem(CACHE_KEY);
-
   const sessions = await getAllSessions();
-  if (sessions.length === 0 && cached) return parseInt(cached);
+  
+  if (!sessions || sessions.length === 0) {
+    localStorage.setItem(CACHE_KEY, '0');
+    memoryCache.streak = 0;
+    return 0;
+  }
 
-  // Shielded loss-days count as survived, not broken
   const profile = await getProfile();
   const shielded = new Set(profile?.shieldedDates ?? []);
 
-  let streak = 0;
-  const byDate = new Map<string, GhostSession[]>();
+  // Build set of winning dates
+  const winDates = new Set<string>();
   sessions.forEach(s => {
-    const d = new Date(s.date).toDateString();
-    if (!byDate.has(d)) byDate.set(d, []);
-    byDate.get(d)!.push(s);
+    if (s.result === 'win') {
+      winDates.add(new Date(s.date).toDateString());
+    }
   });
-  const dates = Array.from(byDate.keys()).sort(
-    (a, b) => new Date(b).getTime() - new Date(a).getTime()
-  );
-  for (const d of dates) {
-    if (byDate.get(d)!.some(s => s.result === 'win')) streak++;
-    else if (shielded.has(d)) continue; // shield absorbed this day — streak survives
-    else break;
+
+  if (winDates.size === 0) {
+    localStorage.setItem(CACHE_KEY, '0');
+    memoryCache.streak = 0;
+    return 0;
   }
-  
-  localStorage.setItem(CACHE_KEY, streak.toString());
-  memoryCache.streak = streak;
-  return streak;
+
+  const todayStr = new Date().toDateString();
+  const yesterdayStr = new Date(Date.now() - 86400000).toDateString();
+
+  const hasWinToday = winDates.has(todayStr);
+  const hasWinYesterday = winDates.has(yesterdayStr);
+  const isYesterdayShielded = shielded.has(yesterdayStr);
+
+  // If user hasn't won today, hasn't won yesterday, and yesterday wasn't shielded → STREAK IS BROKEN (0)
+  if (!hasWinToday && !hasWinYesterday && !isYesterdayShielded) {
+    localStorage.setItem(CACHE_KEY, '0');
+    memoryCache.streak = 0;
+    return 0;
+  }
+
+  // Active streak: calculate consecutive days backwards
+  let checkDate = hasWinToday ? new Date() : new Date(Date.now() - 86400000);
+  let streakCount = 0;
+
+  while (true) {
+    const dStr = checkDate.toDateString();
+    if (winDates.has(dStr)) {
+      streakCount++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    } else if (shielded.has(dStr)) {
+      // Shield absorbs missed day
+      checkDate.setDate(checkDate.getDate() - 1);
+    } else {
+      // Missed unshielded day breaks streak
+      break;
+    }
+  }
+
+  localStorage.setItem(CACHE_KEY, streakCount.toString());
+  memoryCache.streak = streakCount;
+  return streakCount;
 }
 
 export async function getYesterdayResult(): Promise<'win' | 'loss' | 'none'> {

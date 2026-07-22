@@ -217,11 +217,34 @@ export default function NutritionOnboardingPage() {
   return (
     <div style={{ paddingBottom: 40 }}>
       <header className="hdr">
-        <button className="hdr-back" onClick={() => (step === 0 ? router.push('/nutrition') : setStep(step - 1))}>
+        <button
+          type="button"
+          className="hdr-back"
+          title={step === 0 ? "Back to Home" : "Previous Step"}
+          onClick={() => (step === 0 ? router.push('/') : setStep(step - 1))}
+        >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6"/></svg>
         </button>
         <span className="hdr-logo">🥗 NUTRITIONIST</span>
-        <span style={{ color: 'var(--text3)', fontSize: 12, fontWeight: 700 }}>{step + 1}/4</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ color: 'var(--text3)', fontSize: 12, fontWeight: 700 }}>{step + 1}/4</span>
+          <button
+            type="button"
+            onClick={() => router.push('/')}
+            style={{
+              background: 'rgba(255,255,255,0.08)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              padding: '4px 10px',
+              fontSize: '11px',
+              fontWeight: 700,
+              color: 'var(--text2)',
+              cursor: 'pointer'
+            }}
+          >
+            Home
+          </button>
+        </div>
       </header>
 
       {step === 0 && (
