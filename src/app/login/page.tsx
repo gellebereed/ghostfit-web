@@ -1,4 +1,5 @@
 'use client';
+
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
@@ -7,17 +8,38 @@ function getRedirectUrl() {
 }
 
 export default function LoginPage() {
+  const [activeTab, setActiveTab] = useState<'auth' | 'waitlist'>('auth');
   const [mode, setMode] = useState<'login' | 'signup'>('login');
+  
+  // Auth state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // Early access state
   const [earlyEmail, setEarlyEmail] = useState('');
   const [joining, setJoining] = useState(false);
   const [earlyError, setEarlyError] = useState<string | null>(null);
   const [earlySuccess, setEarlySuccess] = useState<string | null>(null);
+
+  // Password strength checker
+  const getPasswordStrength = (pass: string) => {
+    if (!pass) return { score: 0, label: '', color: 'transparent' };
+    if (pass.length < 6) return { score: 1, label: 'Too short', color: '#ff4444' };
+    let score = 1;
+    if (pass.length >= 8) score++;
+    if (/[A-Z]/.test(pass) && /[0-9]/.test(pass)) score++;
+    if (/[^A-Za-z0-9]/.test(pass)) score++;
+    
+    if (score <= 2) return { score: 2, label: 'Weak', color: '#ffbb33' };
+    if (score === 3) return { score: 3, label: 'Good', color: '#00C851' };
+    return { score: 4, label: 'Strong', color: '#00FF87' };
+  };
+
+  const strength = getPasswordStrength(password);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -31,12 +53,15 @@ export default function LoginPage() {
         password,
         options: { emailRedirectTo: getRedirectUrl() },
       });
-      if (error) setError(error.message);
-      else setSuccessMsg('Check your email for a confirmation link!');
+      if (error) {
+        setError(error.message);
+      } else {
+        setSuccessMsg('Check your email for a confirmation link to activate your account!');
+      }
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
-        setError('Invalid email or password.');
+        setError('Invalid credentials. Please check your email and password.');
       } else {
         window.location.href = '/';
         return;
@@ -47,14 +72,18 @@ export default function LoginPage() {
 
   async function handleForgotPassword() {
     if (!email) {
-      setError('Enter your email first.');
+      setError('Please enter your email address first.');
       return;
     }
     setError(null);
-    await supabase.auth.resetPasswordForEmail(email, {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${getRedirectUrl()}?next=/login`,
     });
-    setSuccessMsg('Password reset link sent to your email.');
+    if (error) {
+      setError(error.message);
+    } else {
+      setSuccessMsg('Password reset instructions sent to your email.');
+    }
   }
 
   async function handleGoogleLogin() {
@@ -79,123 +108,326 @@ export default function LoginPage() {
       });
       const body = (await response.json()) as { ok: boolean; error?: string; message?: string };
       if (!response.ok || !body.ok) {
-        setEarlyError(body.error ?? 'Could not join the list. Try again.');
+        setEarlyError(body.error ?? 'Could not join list. Please try again.');
       } else {
-        setEarlySuccess(body.message ?? 'You are in. We will notify you soon.');
+        setEarlySuccess(body.message ?? 'You are locked in! We will notify you at release.');
         setEarlyEmail('');
       }
     } catch {
-      setEarlyError('Could not join the list. Try again.');
+      setEarlyError('Connection error. Please try again.');
     } finally {
       setJoining(false);
     }
   }
 
   return (
-    <div className="auth-page">
-      <div className="card" style={{ marginBottom: 16, width: '100%', maxWidth: 420 }}>
-        <h2 style={{ fontSize: 22, marginBottom: 8 }}>Train harder. Track smarter.</h2>
-        <p style={{ color: 'var(--text2)', marginBottom: 12 }}>
-          Join early access and get launch updates before public release.
-        </p>
-        <form onSubmit={handleEarlySignup}>
-          <div className="auth-field">
-            <input
-              type="email"
-              className="auth-input"
-              placeholder="you@example.com"
-              value={earlyEmail}
-              onChange={e => setEarlyEmail(e.target.value)}
-              required
-              autoComplete="email"
-            />
+    <div className="login-portal">
+      {/* Ambient background glowing mesh */}
+      <div className="portal-glow-bg">
+        <div className="glow-orb orb-1" />
+        <div className="glow-orb orb-2" />
+        <div className="grid-overlay" />
+      </div>
+
+      <main className="portal-container">
+        {/* Logo & Branding Header */}
+        <header className="portal-header">
+          <div className="portal-logo-wrapper">
+            <svg className="portal-logo-svg" viewBox="0 0 512 512" width="64" height="64">
+              <path d="M 256 100 C 170 100, 130 160, 130 250 L 130 370 L 172 340 L 214 370 L 256 340 L 298 370 L 340 340 L 382 370 L 382 250 C 382 160, 342 100, 256 100 Z" fill="url(#portalGhostGrad)" />
+              <path d="M 185 210 Q 220 230 235 240 Q 210 248 180 240 Z" fill="#0A0A0A" />
+              <path d="M 327 210 Q 292 230 277 240 Q 302 248 332 240 Z" fill="#0A0A0A" />
+              <circle cx="210" cy="232" r="6" fill="#00FF87" />
+              <circle cx="302" cy="232" r="6" fill="#00FF87" />
+              <defs>
+                <linearGradient id="portalGhostGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#00FF87" />
+                  <stop offset="100%" stopColor="#60EFFF" />
+                </linearGradient>
+              </defs>
+            </svg>
+            <div className="logo-pulse-ring" />
           </div>
-          {earlyError && <div className="auth-error"><p>{earlyError}</p></div>}
-          {earlySuccess && <div className="auth-success"><p>{earlySuccess}</p></div>}
-          <button type="submit" className="btn-primary" disabled={joining}>
-            {joining ? 'Joining...' : 'Join Early Access'}
-          </button>
-        </form>
-      </div>
 
-      <div className="auth-logo">
-        <div className="auth-ghost">Ghost</div>
-        <h1 className="auth-title">GHOSTFIT</h1>
-        <p className="auth-sub">Beat your past self</p>
-      </div>
+          <h1 className="portal-title">
+            GHOST<span className="title-accent">FIT</span>
+          </h1>
+          <p className="portal-subtitle">BATTLE YOUR PAST SELF • DOMINATE YOUR FUTURE</p>
+        </header>
 
-      <div className="auth-tabs">
-        {(['login', 'signup'] as const).map(m => (
-          <button
-            key={m}
-            className={`auth-tab ${mode === m ? 'active' : ''}`}
-            onClick={() => {
-              setMode(m);
-              setError(null);
-              setSuccessMsg(null);
-            }}
-          >
-            {m === 'login' ? 'Sign In' : 'Sign Up'}
-          </button>
-        ))}
-      </div>
+        {/* Main Portal Card */}
+        <div className="portal-card">
+          {/* Main Mode Navigation (Auth vs Waitlist) */}
+          <div className="portal-nav-pills">
+            <button
+              className={`nav-pill ${activeTab === 'auth' ? 'active' : ''}`}
+              onClick={() => setActiveTab('auth')}
+            >
+              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" />
+              </svg>
+              <span>Arena Access</span>
+            </button>
+            <button
+              className={`nav-pill ${activeTab === 'waitlist' ? 'active' : ''}`}
+              onClick={() => setActiveTab('waitlist')}
+            >
+              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>Early Beta</span>
+            </button>
+          </div>
 
-      <form className="auth-form" onSubmit={handleSubmit}>
-        <div className="auth-field">
-          <label className="auth-label">Email</label>
-          <input
-            type="email"
-            className="auth-input"
-            placeholder="you@example.com"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-          />
+          {activeTab === 'auth' ? (
+            <div className="auth-tab-content">
+              {/* Sub Mode Selector (Sign In vs Sign Up) */}
+              <div className="sub-mode-toggle">
+                <button
+                  className={`sub-toggle-btn ${mode === 'login' ? 'active' : ''}`}
+                  onClick={() => { setMode('login'); setError(null); setSuccessMsg(null); }}
+                >
+                  Sign In
+                </button>
+                <button
+                  className={`sub-toggle-btn ${mode === 'signup' ? 'active' : ''}`}
+                  onClick={() => { setMode('signup'); setError(null); setSuccessMsg(null); }}
+                >
+                  Create Account
+                </button>
+              </div>
+
+              <form className="portal-form" onSubmit={handleSubmit}>
+                {/* Email Field */}
+                <div className="form-group">
+                  <label className="form-label">ACCOUNT EMAIL</label>
+                  <div className="input-icon-wrapper">
+                    <svg className="input-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <input
+                      type="email"
+                      className="portal-input"
+                      placeholder="athlete@ghostfit.app"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      required
+                      autoComplete="email"
+                    />
+                  </div>
+                </div>
+
+                {/* Password Field */}
+                <div className="form-group">
+                  <div className="label-row">
+                    <label className="form-label">PASSWORD</label>
+                    {mode === 'login' && (
+                      <button type="button" className="forgot-link" onClick={handleForgotPassword}>
+                        Forgot?
+                      </button>
+                    )}
+                  </div>
+                  <div className="input-icon-wrapper">
+                    <svg className="input-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0110 0v4" />
+                    </svg>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      className="portal-input"
+                      placeholder="••••••••••••"
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      required
+                      minLength={6}
+                      autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                    />
+                    <button
+                      type="button"
+                      className="pass-toggle-btn"
+                      onClick={() => setShowPassword(!showPassword)}
+                      aria-label="Toggle password visibility"
+                    >
+                      {showPassword ? (
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                  
+                  {/* Password Strength Indicator (On Signup) */}
+                  {mode === 'signup' && password.length > 0 && (
+                    <div className="strength-meter">
+                      <div className="strength-bars">
+                        {[1, 2, 3, 4].map(idx => (
+                          <div
+                            key={idx}
+                            className={`strength-bar ${idx <= strength.score ? 'active' : ''}`}
+                            style={{ backgroundColor: idx <= strength.score ? strength.color : undefined }}
+                          />
+                        ))}
+                      </div>
+                      <span className="strength-text" style={{ color: strength.color }}>
+                        {strength.label}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Status Messages */}
+                {error && (
+                  <div className="portal-alert error">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                {successMsg && (
+                  <div className="portal-alert success">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+                      <polyline points="22 4 12 14.01 9 11.01" />
+                    </svg>
+                    <span>{successMsg}</span>
+                  </div>
+                )}
+
+                {/* Primary Submit Button */}
+                <button type="submit" className="portal-submit-btn" disabled={loading}>
+                  {loading ? (
+                    <span className="spinner" />
+                  ) : mode === 'login' ? (
+                    <>
+                      <span>ENTER THE ARENA</span>
+                      <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                        <path d="M5 12h14M12 5l7 7-7 7" />
+                      </svg>
+                    </>
+                  ) : (
+                    <>
+                      <span>INITIALIZE ATHLETE</span>
+                      <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                        <path d="M5 12h14M12 5l7 7-7 7" />
+                      </svg>
+                    </>
+                  )}
+                </button>
+
+                <div className="portal-divider">
+                  <span>OR CONTINUE WITH</span>
+                </div>
+
+                {/* Google Sign In Button */}
+                <button
+                  type="button"
+                  className="google-btn"
+                  onClick={handleGoogleLogin}
+                  disabled={loading}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z" />
+                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.29v3.15C3.26 21.3 7.31 24 12 24z" />
+                    <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.29C.47 8.21 0 10.05 0 12s.47 3.79 1.29 5.42l3.99-3.15z" />
+                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.58l3.99 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
+                  </svg>
+                  <span>Google Account</span>
+                </button>
+              </form>
+            </div>
+          ) : (
+            <div className="waitlist-tab-content">
+              <div className="waitlist-badge">
+                <span className="badge-dot" />
+                <span>LIMITED EARLY SLOTS</span>
+              </div>
+              <h2 className="waitlist-heading">Claim Early Access</h2>
+              <p className="waitlist-desc">
+                Get first access to AI Ghost battles, priority server access, and an exclusive Founders Avatar skin at launch.
+              </p>
+
+              <form onSubmit={handleEarlySignup} className="portal-form">
+                <div className="form-group">
+                  <label className="form-label">YOUR EMAIL</label>
+                  <div className="input-icon-wrapper">
+                    <svg className="input-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <input
+                      type="email"
+                      className="portal-input"
+                      placeholder="founder@example.com"
+                      value={earlyEmail}
+                      onChange={e => setEarlyEmail(e.target.value)}
+                      required
+                      autoComplete="email"
+                    />
+                  </div>
+                </div>
+
+                {earlyError && (
+                  <div className="portal-alert error">
+                    <span>{earlyError}</span>
+                  </div>
+                )}
+
+                {earlySuccess && (
+                  <div className="portal-alert success">
+                    <span>{earlySuccess}</span>
+                  </div>
+                )}
+
+                <button type="submit" className="portal-submit-btn" disabled={joining}>
+                  {joining ? (
+                    <span className="spinner" />
+                  ) : (
+                    <>
+                      <span>JOIN WAITLIST NOW</span>
+                      <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                        <path d="M5 12h14M12 5l7 7-7 7" />
+                      </svg>
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          )}
         </div>
 
-        <div className="auth-field">
-          <label className="auth-label">Password</label>
-          <input
-            type="password"
-            className="auth-input"
-            placeholder="Min 6 characters"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-            minLength={6}
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-          />
-        </div>
-
-        {error && (
-          <div className="auth-error">
-            <p>{error}</p>
+        {/* Feature Highlights Ticker */}
+        <footer className="portal-features">
+          <div className="feature-item">
+            <span className="feature-icon">⚔️</span>
+            <div className="feature-text">
+              <strong>Ghost Battles</strong>
+              <span>Compete with your past reps</span>
+            </div>
           </div>
-        )}
-
-        {successMsg && (
-          <div className="auth-success">
-            <p>{successMsg}</p>
+          <div className="feature-item">
+            <span className="feature-icon">⚡</span>
+            <div className="feature-text">
+              <strong>Smart Scaling</strong>
+              <span>AI progressive overload</span>
+            </div>
           </div>
-        )}
-
-        <button type="submit" className="btn-primary" disabled={loading} style={{ marginTop: 4 }}>
-          {loading ? '...' : mode === 'login' ? 'Sign In' : 'Create Account'}
-        </button>
-
-        {mode === 'login' && (
-          <button type="button" className="auth-forgot" onClick={handleForgotPassword}>
-            Forgot password?
-          </button>
-        )}
-
-        <button type="button" className="btn-secondary" onClick={handleGoogleLogin} disabled={loading} style={{ marginTop: 8 }}>
-          Continue with Google
-        </button>
-      </form>
-
-      <p className="auth-footer">Your data syncs across all your devices once you sign in.</p>
+          <div className="feature-item">
+            <span className="feature-icon">🪙</span>
+            <div className="feature-text">
+              <strong>Soul Rewards</strong>
+              <span>Earn gear & badges</span>
+            </div>
+          </div>
+        </footer>
+      </main>
     </div>
   );
 }

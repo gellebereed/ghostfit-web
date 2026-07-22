@@ -7,6 +7,16 @@ export const metadata: Metadata = {
   title: "GhostFit – Battle Your Past Self",
   description: "Gamified fitness app where you fight your ghost",
   manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" }
+    ],
+    shortcut: "/favicon.svg",
+    apple: [
+      { url: "/apple-icon.png", sizes: "180x180", type: "image/png" }
+    ]
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
