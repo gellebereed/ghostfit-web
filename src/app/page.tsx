@@ -188,11 +188,11 @@ export default function HomePage() {
   }, []);
 
   if (!ready) {
-    if (!showLoader) return null;
     return (
-      <div className="flex-center" style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
-        <div className="ghost-loader" style={{ fontSize: 40 }}>👻</div>
-        <p style={{ color: 'var(--text2)', fontSize: 13 }}>Summoning your ghost...</p>
+      <div className="full-viewport-center">
+        <div className="ghost-loader" style={{ fontSize: 56 }}>👻</div>
+        <h2 style={{ fontSize: 20, fontWeight: 900, marginTop: 16, color: 'var(--text)', letterSpacing: 2 }}>SUMMONING YOUR GHOST...</h2>
+        <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 6 }}>Preparing your combat arena</p>
       </div>
     );
   }

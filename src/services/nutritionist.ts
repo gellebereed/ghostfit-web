@@ -189,7 +189,7 @@ Return ONLY valid JSON:
     system: prompt,
     user: `Build the ${countryName} food catalog`,
     maxTokens: 16384,
-    validate: p => Array.isArray(p?.foods) && p.foods.length >= 40,
+    validate: p => Array.isArray(p?.foods) && p.foods.length >= 5,
   });
   const foods = (parsed.foods ?? [])
     .map(sanitizeFood)

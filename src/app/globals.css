@@ -2648,4 +2648,22 @@ button{transition:transform 0.15s ease,opacity 0.15s ease,background 0.2s ease,b
   width: 100%;
 }
 
+/* Full Viewport Dead-Center Loader */
+.full-viewport-center {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 99999 !important;
+  background: var(--bg) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  text-align: center !important;
+  box-sizing: border-box !important;
+}
+
 

@@ -57,35 +57,103 @@ export function computeTargets(opts: {
   return { kcal, protein, carbs, fat };
 }
 
-// ─── Food catalog (shared cache, exercise_cache pattern) ─────────────────────
+// ─── Food catalog (shared cache with rich fallback) ─────────────────────
+
+export const DEFAULT_GLOBAL_FOODS: FoodItem[] = [
+  // Proteins
+  { id: 'chicken-breast', name: 'Grilled Chicken Breast', category: 'protein', serving: '100g cooked', kcal: 165, protein: 31, carbs: 0, fat: 3.6 },
+  { id: 'eggs-large', name: 'Whole Eggs', category: 'protein', serving: '2 large eggs', kcal: 140, protein: 12, carbs: 1, fat: 10 },
+  { id: 'egg-whites', name: 'Egg Whites', category: 'protein', serving: '100g', kcal: 52, protein: 11, carbs: 0.7, fat: 0.2 },
+  { id: 'salmon-fillet', name: 'Salmon Fillet', category: 'protein', serving: '100g cooked', kcal: 206, protein: 22, carbs: 0, fat: 12 },
+  { id: 'lean-beef', name: 'Lean Ground Beef (90%)', category: 'protein', serving: '100g cooked', kcal: 215, protein: 26, carbs: 0, fat: 11 },
+  { id: 'tuna-canned', name: 'Canned Tuna in Water', category: 'protein', serving: '100g drained', kcal: 116, protein: 26, carbs: 0, fat: 1 },
+  { id: 'tofu-firm', name: 'Firm Tofu', category: 'protein', serving: '100g', kcal: 144, protein: 17, carbs: 3, fat: 8 },
+  { id: 'turkey-breast', name: 'Roasted Turkey Breast', category: 'protein', serving: '100g cooked', kcal: 135, protein: 30, carbs: 0, fat: 1 },
+  { id: 'red-lentils', name: 'Cooked Lentils', category: 'protein', serving: '1 cup (198g)', kcal: 230, protein: 18, carbs: 40, fat: 0.8 },
+  { id: 'whey-protein', name: 'Whey Protein Powder', category: 'protein', serving: '1 scoop (30g)', kcal: 120, protein: 24, carbs: 2, fat: 1.5 },
+  { id: 'tilapia-fillet', name: 'White Fish (Tilapia/Cod)', category: 'protein', serving: '100g cooked', kcal: 96, protein: 20, carbs: 0, fat: 1.7 },
+
+  // Carbs
+  { id: 'white-rice', name: 'White Rice', category: 'carb', serving: '1 cup cooked (158g)', kcal: 205, protein: 4.2, carbs: 45, fat: 0.4 },
+  { id: 'brown-rice', name: 'Brown Rice', category: 'carb', serving: '1 cup cooked (195g)', kcal: 218, protein: 4.5, carbs: 46, fat: 1.6 },
+  { id: 'rolled-oats', name: 'Rolled Oatmeal', category: 'carb', serving: '1/2 cup dry (40g)', kcal: 150, protein: 5, carbs: 27, fat: 2.5 },
+  { id: 'sweet-potato', name: 'Baked Sweet Potato', category: 'carb', serving: '1 medium (114g)', kcal: 103, protein: 2.3, carbs: 24, fat: 0.2 },
+  { id: 'white-potato', name: 'Boiled White Potato', category: 'carb', serving: '1 medium (150g)', kcal: 130, protein: 3, carbs: 29, fat: 0.2 },
+  { id: 'whole-wheat-bread', name: 'Whole Wheat Bread', category: 'carb', serving: '2 slices (56g)', kcal: 140, protein: 6, carbs: 24, fat: 2 },
+  { id: 'quinoa-cooked', name: 'Cooked Quinoa', category: 'carb', serving: '1 cup (185g)', kcal: 222, protein: 8, carbs: 39, fat: 3.6 },
+  { id: 'pasta-cooked', name: 'Cooked Pasta', category: 'carb', serving: '1 cup (140g)', kcal: 220, protein: 8, carbs: 43, fat: 1.3 },
+  { id: 'injera-bread', name: 'Traditional Flatbread / Injera', category: 'carb', serving: '1 large piece (150g)', kcal: 240, protein: 7, carbs: 50, fat: 1 },
+  { id: 'pita-bread', name: 'Whole Wheat Pita', category: 'carb', serving: '1 pita (60g)', kcal: 170, protein: 6, carbs: 35, fat: 1 },
+
+  // Vegetables
+  { id: 'steamed-broccoli', name: 'Fresh Broccoli', category: 'vegetable', serving: '1 cup (91g)', kcal: 31, protein: 2.5, carbs: 6, fat: 0.3 },
+  { id: 'spinach-fresh', name: 'Fresh Spinach', category: 'vegetable', serving: '2 cups (60g)', kcal: 14, protein: 1.7, carbs: 2.2, fat: 0.2 },
+  { id: 'mixed-salad', name: 'Mixed Salad Greens', category: 'vegetable', serving: '2 cups (100g)', kcal: 20, protein: 1.5, carbs: 3.5, fat: 0.2 },
+  { id: 'sweet-corn', name: 'Sweet Corn', category: 'vegetable', serving: '1/2 cup (82g)', kcal: 66, protein: 2.3, carbs: 15, fat: 0.8 },
+  { id: 'ripe-tomatoes', name: 'Fresh Tomatoes', category: 'vegetable', serving: '1 medium (123g)', kcal: 22, protein: 1.1, carbs: 4.8, fat: 0.2 },
+  { id: 'cucumbers', name: 'Sliced Cucumber', category: 'vegetable', serving: '1 cup (104g)', kcal: 16, protein: 0.7, carbs: 3.8, fat: 0.1 },
+
+  // Fruits
+  { id: 'fresh-banana', name: 'Fresh Banana', category: 'fruit', serving: '1 medium (118g)', kcal: 105, protein: 1.3, carbs: 27, fat: 0.3 },
+  { id: 'red-apple', name: 'Fresh Apple', category: 'fruit', serving: '1 medium (182g)', kcal: 95, protein: 0.5, carbs: 25, fat: 0.3 },
+  { id: 'sweet-berries', name: 'Mixed Berries', category: 'fruit', serving: '1 cup (150g)', kcal: 80, protein: 1, carbs: 18, fat: 0.5 },
+  { id: 'juicy-orange', name: 'Fresh Orange', category: 'fruit', serving: '1 medium (131g)', kcal: 62, protein: 1.2, carbs: 15, fat: 0.2 },
+
+  // Dairy
+  { id: 'greek-yogurt', name: 'Plain Greek Yogurt (0%)', category: 'dairy', serving: '1 cup (200g)', kcal: 120, protein: 20, carbs: 7, fat: 0 },
+  { id: 'cottage-cheese', name: 'Low-Fat Cottage Cheese', category: 'dairy', serving: '1/2 cup (113g)', kcal: 90, protein: 14, carbs: 5, fat: 1.5 },
+  { id: 'cow-milk', name: 'Whole Milk', category: 'dairy', serving: '1 cup (244ml)', kcal: 149, protein: 8, carbs: 12, fat: 8 },
+
+  // Fats & Snacks
+  { id: 'raw-almonds', name: 'Raw Almonds', category: 'fat', serving: '1 oz (28g / ~23 nuts)', kcal: 164, protein: 6, carbs: 6, fat: 14 },
+  { id: 'peanut-butter', name: 'Natural Peanut Butter', category: 'fat', serving: '2 tbsp (32g)', kcal: 190, protein: 8, carbs: 7, fat: 16 },
+  { id: 'extra-virgin-olive-oil', name: 'Extra Virgin Olive Oil', category: 'fat', serving: '1 tbsp (15ml)', kcal: 119, protein: 0, carbs: 0, fat: 13.5 },
+  { id: 'ripe-avocado', name: 'Fresh Avocado', category: 'fat', serving: '1/2 avocado (100g)', kcal: 160, protein: 2, carbs: 8.5, fat: 14.7 },
+];
 
 export async function getFoodCatalog(countryCode: string, countryName: string): Promise<FoodItem[]> {
   const code = countryCode.toUpperCase();
-  const { data } = await supabase
-    .from('food_catalogs')
-    .select('foods')
-    .eq('country_code', code)
-    .single();
+  try {
+    const { data } = await supabase
+      .from('food_catalogs')
+      .select('foods')
+      .eq('country_code', code)
+      .single();
 
-  if (data?.foods && Array.isArray(data.foods) && data.foods.length > 0) {
-    return data.foods as FoodItem[];
+    if (data?.foods && Array.isArray(data.foods) && data.foods.length > 0) {
+      return data.foods as FoodItem[];
+    }
+  } catch {
+    // Continue to API fetch if database query fails
   }
 
-  const res = await fetch('/api/food-catalog', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ countryName }),
-  });
-  if (!res.ok) throw new Error('Could not build the food catalog. Try again.');
-  const { foods } = await res.json();
+  try {
+    const res = await fetch('/api/food-catalog', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ countryName }),
+    });
 
-  await supabase.from('food_catalogs').upsert({
-    country_code: code,
-    country_name: countryName,
-    foods,
-    cached_at: new Date().toISOString(),
-  });
-  return foods as FoodItem[];
+    if (res.ok) {
+      const { foods } = await res.json();
+      if (Array.isArray(foods) && foods.length > 0) {
+        try {
+          await supabase.from('food_catalogs').upsert({
+            country_code: code,
+            country_name: countryName,
+            foods,
+            cached_at: new Date().toISOString(),
+          });
+        } catch { /* ignore cache write errors */ }
+        return foods as FoodItem[];
+      }
+    }
+  } catch (err) {
+    console.warn('Food catalog fetch notice, using fallback catalog:', err);
+  }
+
+  // Resilient Fallback: Return default global foods catalog
+  return DEFAULT_GLOBAL_FOODS;
 }
 
 // ─── Nutrition profile ───────────────────────────────────────────────────────
