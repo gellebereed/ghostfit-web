@@ -124,7 +124,7 @@ export default function ShopScreen() {
           <p className="shield-owned">{shields}/{STREAK_SHIELD_MAX} owned</p>
         </div>
         <button
-          onPointerDown={handleBuyShield}
+          onClick={handleBuyShield}
           disabled={shields >= STREAK_SHIELD_MAX || soulCoins < STREAK_SHIELD_COST}
           className={`shop-buy-btn ${shields >= STREAK_SHIELD_MAX ? 'equipped' : soulCoins >= STREAK_SHIELD_COST ? 'available' : 'disabled'}`}
           style={{ width: 'auto', padding: '10px 14px' }}
@@ -138,7 +138,7 @@ export default function ShopScreen() {
         {['All', 'Aura', 'Headgear', 'Effect', 'Badge'].map(filter => (
           <button
             key={filter}
-            onPointerDown={() => setActiveFilter(filter.toLowerCase())}
+            onClick={() => setActiveFilter(filter.toLowerCase())}
             className={`shop-filter-btn ${activeFilter === filter.toLowerCase() ? 'active' : ''}`}
           >
             {filter}
@@ -170,7 +170,7 @@ export default function ShopScreen() {
               
               {/* Buy / Owned button */}
               <button
-                onPointerDown={() => !owned && handlePurchase(item)}
+                onClick={() => !owned && handlePurchase(item)}
                 disabled={owned || !canAfford}
                 className={`shop-buy-btn ${owned ? 'equipped' : canAfford ? 'available' : 'disabled'}`}
               >

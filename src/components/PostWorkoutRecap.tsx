@@ -45,6 +45,7 @@ export default function PostWorkoutRecap({
 }: PostWorkoutRecapProps) {
   const profile = useAppStore(state => state.profile);
   const [chestOpened, setChestOpened] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   function openChest() {
     if (chestOpened) return;
@@ -53,6 +54,7 @@ export default function PostWorkoutRecap({
       try { arcadeSounds.coinEarned(); } catch { /* sound is optional */ }
     }
   }
+
   const calories = calculateCaloriesBurned(
     exerciseSessions,
     profile?.weight_kg ?? 75
@@ -64,12 +66,13 @@ export default function PostWorkoutRecap({
   const cardRef = useRef<HTMLDivElement>(null);
 
   async function handleShare() {
-    if (!cardRef.current) return;
+    if (!cardRef.current || sharing) return;
+    setSharing(true);
     try {
       const html2canvas = (await import('html2canvas')).default;
       const canvas = await html2canvas(cardRef.current, {
         backgroundColor: '#0A0A0A',
-        scale: 2,  // Retina quality
+        scale: 2,
         useCORS: true,
         logging: false
       });
@@ -84,7 +87,6 @@ export default function PostWorkoutRecap({
             title: isWin ? 'I just beat my ghost on GhostFit! 👻🔥' : 'Ghost got me today. Rematch tomorrow 👻',
           });
         } else {
-          // Fallback — download
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
@@ -92,9 +94,11 @@ export default function PostWorkoutRecap({
           a.click();
           URL.revokeObjectURL(url);
         }
+        setSharing(false);
       }, 'image/png', 0.95);
     } catch (e) {
       console.error('Share failed:', e);
+      setSharing(false);
     }
   }
 
@@ -105,208 +109,160 @@ export default function PostWorkoutRecap({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/90 flex flex-col
-                    items-center justify-center p-4 overflow-y-auto">
+    <div className="recap-modal-overlay">
       {isWin && <Celebration />}
 
-      {/* THE SHAREABLE CARD */}
-      <div
-        ref={cardRef}
-        className="w-full max-w-[380px] rounded-3xl overflow-hidden
-                   border border-white/10"
-        style={{
-          background: isWin 
-            ? 'linear-gradient(160deg, #0D2010 0%, #0A0A0A 50%, #0D2010 100%)'
-            : 'linear-gradient(160deg, #1A0808 0%, #0A0A0A 50%, #1A0808 100%)'
-        }}
-      >
-        {/* TOP — App branding */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">👻</span>
-            <span className="text-white font-black text-sm tracking-widest uppercase">
-              GhostFit
-            </span>
-          </div>
-          <span className="text-gray-600 text-xs">ghostfit.app</span>
-        </div>
-
-        {/* DIVIDER */}
-        <div className="h-px bg-white/5 mx-5" />
-
-        {/* FIGHTERS */}
-        <div className="flex items-center justify-between px-8 py-6">
-          {/* YOU */}
-          <div className="flex flex-col items-center gap-2">
-            <Avatar
-              type="user"
-              size={72}
-              animationState={isWin ? 'celebrating' : 'losing'}
-              tier={profile?.equippedCosmetics?.tier ? parseInt(profile.equippedCosmetics.tier) : 1}
-            />
-            <span className="text-white text-xs font-black tracking-widest">
-              {profile?.characterName ?? 'YOU'}
-            </span>
-          </div>
-
-          {/* CENTER RESULT */}
-          <div className="flex flex-col items-center gap-1">
-            <span className={`text-3xl font-black tracking-tight leading-none
-              ${isWin ? 'text-[#00FF87]' : 'text-red-400'}`}>
-              {isWin ? 'WIN' : 'LOSS'}
-            </span>
-            <span className="text-gray-600 text-[10px] font-bold uppercase tracking-widest">
-              {exercisesWon}/{totalExercises} exercises
-            </span>
-          </div>
-
-          {/* GHOST */}
-          <div className="flex flex-col items-center gap-2">
-            <Avatar
-              type="ghost"
-              size={72}
-              animationState={isWin ? 'losing' : 'celebrating'}
-            />
-            <span className="text-gray-500 text-xs font-black tracking-widest">
-              {profile?.ghostName ?? 'GHOST'}
-            </span>
-          </div>
-        </div>
-
-        {/* RESULT BANNER */}
-        <div className={`mx-5 py-3 rounded-2xl text-center mb-5
-          ${isWin 
-            ? 'bg-[#00FF87]/10 border border-[#00FF87]/30' 
-            : 'bg-red-500/10 border border-red-500/20'}`}>
-          <p className={`text-lg font-black tracking-wide
-            ${isWin ? 'text-[#00FF87]' : 'text-red-400'}`}>
-            {isWin ? '🔥 YOU WIN' : '💀 GHOST WINS'}
-          </p>
-          {isWin && newStreak >= 2 && (
-            <p className="text-[#00FF87]/70 text-xs font-bold mt-0.5">
-              {newStreak} day win streak 🔥
-            </p>
-          )}
-          {isWin && tierLabel && (
-            <p className="text-gray-500 text-xs mt-0.5">
-              Showing up like this is what a {tierLabel} does.
-            </p>
-          )}
-          {!isWin && shieldUsed && (
-            <p className="text-[#00FF87] text-xs font-bold mt-0.5">
-              🛡️ Streak Shield absorbed the loss — your streak survives
-            </p>
-          )}
-          {!isWin && !shieldUsed && (
-            <p className="text-red-400/60 text-xs mt-0.5">
-              Rematch tomorrow — it&apos;s waiting 👻
-            </p>
-          )}
-        </div>
-
-        {/* STATS GRID — 2×3 */}
-        <div className="grid grid-cols-3 gap-2 px-5 pb-5">
-          {[
-            {
-              value: totalReps,
-              label: 'Total Reps',
-              icon: '💪'
-            },
-            {
-              value: setsCompleted,
-              label: 'Sets Done',
-              icon: '⚡'
-            },
-            {
-              value: `${getDisplayCalories(calories, hasExactWeight)} kcal`,
-              label: 'Calories',
-              icon: '🔥'
-            },
-            {
-              value: formatDuration(durationSeconds),
-              label: 'Duration',
-              icon: '⏱'
-            },
-            {
-              value: exercisesWon,
-              label: 'Won',
-              icon: '🏆'
-            },
-            {
-              // Only show streak on wins, show "—" on loss
-              value: isWin && newStreak > 0 ? `${newStreak} 🔥` : '—',
-              label: 'Streak',
-              icon: isWin ? '🔥' : '💀'
-            },
-          ].map((stat, i) => (
-            <div key={i}
-                 className="bg-[#141414] rounded-xl py-3 px-2 text-center
-                            border border-white/5">
-              <p className={`text-base font-black leading-none
-                ${isWin ? 'text-white' : i === 5 ? 'text-gray-600' : 'text-white'}`}>
-                {stat.value}
-              </p>
-              <p className="text-gray-600 text-[10px] uppercase tracking-wide
-                            font-bold mt-1">
-                {stat.label}
-              </p>
+      <div className="recap-modal-container">
+        {/* THE SHAREABLE CARD */}
+        <div
+          ref={cardRef}
+          className={`recap-card-shell ${isWin ? 'win-theme' : 'loss-theme'}`}
+        >
+          {/* TOP — App branding */}
+          <div className="recap-header">
+            <div className="recap-brand">
+              <span className="recap-brand-icon">👻</span>
+              <span className="recap-brand-name">GHOSTFIT</span>
             </div>
-          ))}
-        </div>
+            <span className="recap-brand-domain">ghostfit.app</span>
+          </div>
 
-        {/* Calorie disclaimer if estimated */}
-        {!hasExactWeight && (
-          <p className="text-center text-gray-700 text-[9px] pb-3 -mt-2">
-            ~ estimated · add weight in Profile for accuracy
-          </p>
-        )}
-      </div>
+          <div className="recap-divider" />
 
-      {/* MYSTERY CHEST — outside shareable card */}
-      {chest && (
-        <div className="w-full max-w-[380px] mt-4">
-          {!chestOpened ? (
-            <button onPointerDown={openChest} className="chest-sealed">
-              <span className="chest-sealed-icon">🎁</span>
-              <span className="chest-sealed-label">MYSTERY CHEST — TAP TO OPEN</span>
-            </button>
-          ) : (
-            <div className="chest-open" style={{ borderColor: chestMeta(chest.rarity).color }}>
-              <span className="chest-open-icon">{chestMeta(chest.rarity).emoji}</span>
-              <div className="chest-open-info">
-                <span className="chest-open-rarity" style={{ color: chestMeta(chest.rarity).color }}>
-                  {chestMeta(chest.rarity).label.toUpperCase()} DROP
+          {/* FIGHTERS MATCHUP */}
+          <div className="recap-fighters-row">
+            {/* YOU */}
+            <div className="recap-fighter">
+              <Avatar
+                type="user"
+                size={68}
+                animationState={isWin ? 'celebrating' : 'losing'}
+                tier={profile?.equippedCosmetics?.tier ? parseInt(profile.equippedCosmetics.tier) : 1}
+              />
+              <span className="recap-fighter-name">
+                {profile?.characterName ?? 'YOU'}
+              </span>
+            </div>
+
+            {/* CENTER RESULT */}
+            <div className="recap-center-badge">
+              <span className={`recap-outcome ${isWin ? 'win' : 'loss'}`}>
+                {isWin ? 'WIN' : 'LOSS'}
+              </span>
+              <span className="recap-score">
+                {exercisesWon}/{totalExercises} EXERCISES
+              </span>
+            </div>
+
+            {/* GHOST */}
+            <div className="recap-fighter">
+              <Avatar
+                type="ghost"
+                size={68}
+                animationState={isWin ? 'losing' : 'celebrating'}
+              />
+              <span className="recap-fighter-name ghost">
+                {profile?.ghostName ?? 'GHOST'}
+              </span>
+            </div>
+          </div>
+
+          {/* RESULT BANNER */}
+          <div className={`recap-banner-box ${isWin ? 'win' : 'loss'}`}>
+            <p className={`recap-banner-title ${isWin ? 'win' : 'loss'}`}>
+              {isWin ? '🔥 YOU WIN' : '💀 GHOST WINS'}
+            </p>
+            {isWin && newStreak >= 2 && (
+              <p className="recap-banner-sub win">
+                {newStreak} day win streak 🔥
+              </p>
+            )}
+            {isWin && tierLabel && (
+              <p className="recap-banner-sub dim">
+                Showing up like this is what a {tierLabel} does.
+              </p>
+            )}
+            {!isWin && shieldUsed && (
+              <p className="recap-banner-sub win">
+                🛡️ Streak Shield absorbed the loss — streak survives
+              </p>
+            )}
+            {!isWin && !shieldUsed && (
+              <p className="recap-banner-sub loss">
+                Rematch tomorrow — it&apos;s waiting 👻
+              </p>
+            )}
+          </div>
+
+          {/* STATS GRID — 3x2 */}
+          <div className="recap-stats-grid">
+            {[
+              { value: totalReps, label: 'Total Reps', icon: '💪' },
+              { value: setsCompleted, label: 'Sets Done', icon: '⚡' },
+              { value: `${getDisplayCalories(calories, hasExactWeight)} kcal`, label: 'Calories', icon: '🔥' },
+              { value: formatDuration(durationSeconds), label: 'Duration', icon: '⏱' },
+              { value: exercisesWon, label: 'Won', icon: '🏆' },
+              { value: isWin && newStreak > 0 ? `${newStreak} 🔥` : '—', label: 'Streak', icon: isWin ? '🔥' : '💀' },
+            ].map((stat, i) => (
+              <div key={i} className="recap-stat-card">
+                <span className="recap-stat-value">{stat.value}</span>
+                <span className="recap-stat-label">
+                  <span className="stat-icon">{stat.icon}</span> {stat.label}
                 </span>
-                <span className="chest-open-coins">+{chest.coins} Soul Coins</span>
               </div>
-            </div>
+            ))}
+          </div>
+
+          {/* Calorie disclaimer if estimated */}
+          {!hasExactWeight && (
+            <p className="recap-disclaimer">
+              ~ estimated · add weight in Profile for accuracy
+            </p>
           )}
         </div>
-      )}
 
-      {/* ACTION BUTTONS — outside shareable card */}
-      <div className="w-full max-w-[380px] mt-4 space-y-3">
-        <button
-          onPointerDown={handleShare}
-          style={{ touchAction: 'manipulation' }}
-          className="w-full py-4 rounded-2xl font-extrabold text-sm uppercase
-                     tracking-widest border border-[#00FF87]/40 text-[#00FF87]
-                     active:scale-[0.98] transition-transform
-                     flex items-center justify-center gap-2"
-        >
-          <span>📤</span>
-          Share Result
-        </button>
-        
-        <button
-          onPointerDown={onContinue}
-          style={{ touchAction: 'manipulation' }}
-          className="w-full py-4 rounded-2xl font-extrabold text-sm uppercase
-                     tracking-widest bg-[#141414] text-white
-                     active:scale-[0.98] transition-transform"
-        >
-          Back to Home →
-        </button>
+        {/* MYSTERY CHEST */}
+        {chest && (
+          <div className="recap-chest-wrapper">
+            {!chestOpened ? (
+              <button onClick={openChest} className="recap-chest-sealed">
+                <span className="chest-emoji">🎁</span>
+                <span className="chest-text">MYSTERY CHEST — TAP TO OPEN</span>
+              </button>
+            ) : (
+              <div className="recap-chest-open" style={{ borderColor: chestMeta(chest.rarity).color }}>
+                <span className="chest-emoji">{chestMeta(chest.rarity).emoji}</span>
+                <div className="chest-info">
+                  <span className="chest-rarity" style={{ color: chestMeta(chest.rarity).color }}>
+                    {chestMeta(chest.rarity).label.toUpperCase()} DROP
+                  </span>
+                  <span className="chest-coins">+{chest.coins} Soul Coins</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ACTION BUTTONS */}
+        <div className="recap-actions-group">
+          <button
+            type="button"
+            onClick={handleShare}
+            disabled={sharing}
+            className="recap-btn-share"
+          >
+            <span>📤</span>
+            <span>{sharing ? 'Generating Image...' : 'Share Result'}</span>
+          </button>
+          
+          <button
+            type="button"
+            onClick={onContinue}
+            className="recap-btn-continue"
+          >
+            <span>Back to Home →</span>
+          </button>
+        </div>
       </div>
     </div>
   );

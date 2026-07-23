@@ -27,7 +27,6 @@
   padding: 0;
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
 }
 html, body {
   font-family: 'Inter', sans-serif;
@@ -37,17 +36,14 @@ html, body {
   min-height: 100dvh;
   overflow-x: hidden;
 }
-a {
-  color: inherit;
-  text-decoration: none;
+a, button, input, select, label, [role="button"] {
   touch-action: manipulation;
   user-select: none;
 }
-button, input {
-  touch-action: manipulation;
-  user-select: none;
+button svg, button span, button img {
+  pointer-events: none;
 }
-input, textarea { user-select:text; }
+input, textarea { user-select: text; }
 
 .app{max-width:430px;margin:0 auto;min-height:100dvh;position:relative;background:var(--bg);}
 
@@ -727,21 +723,365 @@ input, textarea { user-select:text; }
 .taunt-bubble{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:8px 14px;font-size:12px;margin-top:12px;text-align:center;animation:tauntSlide 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.3s both;}
 @keyframes tauntSlide{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
 
-/* ---- Upgrade 7: Post-Workout Recap ---- */
-.recap-overlay{position:fixed;inset:0;z-index:250;background:radial-gradient(circle at center,rgba(0,255,135,0.05),rgba(10,10,10,0.97) 70%);display:flex;flex-direction:column;align-items:center;justify-content:center;animation:fadeIn 0.3s ease;}
-.recap-title{font-size:20px;font-weight:900;letter-spacing:3px;text-transform:uppercase;margin-bottom:4px;}
-.recap-subtitle{font-size:12px;color:var(--text2);margin-bottom:20px;}
-.recap-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px;width:90%;max-width:340px;}
-.recap-card .recap-logo{text-align:center;font-size:12px;font-weight:700;letter-spacing:2px;color:var(--accent);margin-bottom:16px;}
-.recap-battle{display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:16px;}
-.recap-result{text-align:center;font-size:18px;font-weight:900;margin-bottom:16px;}
-.recap-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-.recap-stat{background:rgba(0,255,135,0.05);border-radius:8px;padding:10px;text-align:center;}
-.recap-stat .rs-val{font-size:20px;font-weight:900;color:var(--accent);}
-.recap-stat .rs-lbl{font-size:9px;font-weight:600;color:var(--text3);letter-spacing:1px;text-transform:uppercase;}
-.recap-watermark{text-align:center;font-size:9px;color:var(--text3);margin-top:12px;}
-.recap-buttons{display:flex;gap:10px;width:90%;max-width:340px;margin-top:20px;}
-.recap-buttons button{flex:1;}
+/* ---- Post-Workout Recap Modal (World Class Dark Neon) ---- */
+.recap-modal-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 99999 !important;
+  background: rgba(6, 9, 15, 0.94) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 24px 16px !important;
+  overflow-y: auto !important;
+  box-sizing: border-box !important;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.recap-modal-container {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin: auto;
+}
+
+.recap-card-shell {
+  width: 100%;
+  border-radius: 24px;
+  padding: 20px 20px 24px;
+  box-sizing: border-box;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+}
+
+.recap-card-shell.win-theme {
+  background: linear-gradient(160deg, #0A1B10 0%, #080C14 50%, #0B1E12 100%);
+  border: 1.5px solid rgba(0, 255, 135, 0.3);
+  box-shadow: 0 0 35px rgba(0, 255, 135, 0.15);
+}
+
+.recap-card-shell.loss-theme {
+  background: linear-gradient(160deg, #1C0A0A 0%, #080C14 50%, #1A0909 100%);
+  border: 1.5px solid rgba(255, 68, 68, 0.3);
+  box-shadow: 0 0 35px rgba(255, 68, 68, 0.15);
+}
+
+.recap-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.recap-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.recap-brand-icon {
+  font-size: 20px;
+}
+
+.recap-brand-name {
+  font-family: 'Rajdhani', 'Inter', sans-serif;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #FFFFFF;
+}
+
+.recap-brand-domain {
+  font-size: 11px;
+  color: #64748B;
+  font-weight: 600;
+}
+
+.recap-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin-bottom: 20px;
+}
+
+.recap-fighters-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  margin-bottom: 20px;
+}
+
+.recap-fighter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.recap-fighter-name {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #FFFFFF;
+  text-transform: uppercase;
+}
+
+.recap-fighter-name.ghost {
+  color: #94A3B8;
+}
+
+.recap-center-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px;
+}
+
+.recap-outcome {
+  font-family: 'Rajdhani', 'Inter', sans-serif;
+  font-size: 36px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 2px;
+}
+
+.recap-outcome.win {
+  color: #00FF87;
+  text-shadow: 0 0 20px rgba(0, 255, 135, 0.5);
+}
+
+.recap-outcome.loss {
+  color: #FF4444;
+  text-shadow: 0 0 20px rgba(255, 68, 68, 0.5);
+}
+
+.recap-score {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: #64748B;
+  text-transform: uppercase;
+}
+
+.recap-banner-box {
+  padding: 12px 16px;
+  border-radius: 16px;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.recap-banner-box.win {
+  background: rgba(0, 255, 135, 0.08);
+  border: 1px solid rgba(0, 255, 135, 0.25);
+}
+
+.recap-banner-box.loss {
+  background: rgba(255, 68, 68, 0.08);
+  border: 1px solid rgba(255, 68, 68, 0.25);
+}
+
+.recap-banner-title {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  margin-bottom: 2px;
+}
+
+.recap-banner-title.win {
+  color: #00FF87;
+}
+
+.recap-banner-title.loss {
+  color: #FF4444;
+}
+
+.recap-banner-sub {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.recap-banner-sub.win {
+  color: rgba(0, 255, 135, 0.85);
+}
+
+.recap-banner-sub.loss {
+  color: rgba(255, 68, 68, 0.85);
+}
+
+.recap-banner-sub.dim {
+  color: #94A3B8;
+  font-size: 11px;
+}
+
+.recap-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.recap-stat-card {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.recap-stat-value {
+  font-size: 17px;
+  font-weight: 900;
+  color: #FFFFFF;
+  line-height: 1;
+}
+
+.recap-stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.stat-icon {
+  font-size: 10px;
+}
+
+.recap-disclaimer {
+  font-size: 10px;
+  color: #64748B;
+  text-align: center;
+  margin-top: 4px;
+}
+
+.recap-chest-wrapper {
+  width: 100%;
+}
+
+.recap-chest-sealed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px;
+  background: rgba(255, 215, 0, 0.1);
+  border: 1.5px solid rgba(255, 215, 0, 0.4);
+  border-radius: 16px;
+  color: #FFD700;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.recap-chest-sealed:hover {
+  background: rgba(255, 215, 0, 0.18);
+  transform: translateY(-1px);
+}
+
+.recap-chest-open {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1.5px solid #FFD700;
+  border-radius: 16px;
+}
+
+.chest-emoji {
+  font-size: 26px;
+}
+
+.chest-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.chest-rarity {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+.chest-coins {
+  font-size: 14px;
+  font-weight: 800;
+  color: #FFFFFF;
+}
+
+.recap-actions-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.recap-btn-share {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 16px;
+  background: transparent;
+  border: 2px solid #00FF87;
+  border-radius: 16px;
+  color: #00FF87 !important;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 0 20px rgba(0, 255, 135, 0.15);
+}
+
+.recap-btn-share:hover {
+  background: rgba(0, 255, 135, 0.12) !important;
+  transform: translateY(-1px);
+}
+
+.recap-btn-continue {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+  color: #FFFFFF !important;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.recap-btn-continue:hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+  transform: translateY(-1px);
+}
 
 /* ---- Upgrade 8: Milestone Overlay ---- */
 .milestone-overlay{position:fixed;inset:0;z-index:400;background:rgba(0,0,0,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;animation:fadeIn 0.3s ease;cursor:pointer;}
@@ -2664,6 +3004,97 @@ button{transition:transform 0.15s ease,opacity 0.15s ease,background 0.2s ease,b
   height: 100dvh !important;
   text-align: center !important;
   box-sizing: border-box !important;
+}
+
+/* ==========================================================================
+   EXECUTIVE QUEST & TASK MANAGER STYLES
+   ========================================================================== */
+.task-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.priority-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.goal-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  background: rgba(0, 255, 135, 0.08);
+  border: 1px solid rgba(0, 255, 135, 0.25);
+  border-radius: 6px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.date-badge {
+  font-size: 10px;
+  color: var(--text2);
+  font-weight: 600;
+}
+
+.task-add-btn {
+  background: rgba(0, 255, 135, 0.12);
+  border: 1px solid rgba(0, 255, 135, 0.3);
+  color: var(--accent);
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: var(--t);
+}
+
+.task-add-btn:hover {
+  background: rgba(0, 255, 135, 0.22);
+  transform: translateY(-1px);
+}
+
+.quest-add-task-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 9px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--t);
+}
+
+.quest-add-task-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.task-edit-trigger {
+  background: none;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 6px;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.task-edit-trigger:hover {
+  opacity: 1;
 }
 
 

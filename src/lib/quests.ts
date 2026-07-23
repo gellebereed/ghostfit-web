@@ -105,13 +105,15 @@ export async function updateQuest(questId: string, patch: {
 }
 
 export async function updateTask(taskId: string, patch: {
-  title?: string; priority?: number; doDate?: string | null;
+  title?: string; priority?: number; doDate?: string | null; questId?: string | null; note?: string | null;
 }): Promise<boolean> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const row: Record<string, any> = {};
   if (patch.title !== undefined) row.title = patch.title;
   if (patch.priority !== undefined) row.priority = patch.priority;
   if (patch.doDate !== undefined) row.do_date = patch.doDate;
+  if (patch.questId !== undefined) row.quest_id = patch.questId;
+  if (patch.note !== undefined) row.note = patch.note;
   const { error } = await supabase.from('quest_tasks').update(row).eq('id', taskId);
   return !error;
 }

@@ -25,6 +25,13 @@ function daysUntil(dateStr: string | null): string {
   return `${days}d left`;
 }
 
+function formatDate(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export default function QuestsPage() {
   const { profile, refreshProfile } = useAppStore();
   const [ready, setReady] = useState(false);
@@ -34,17 +41,15 @@ export default function QuestsPage() {
   const [coinFlash, setCoinFlash] = useState<number | null>(null);
   const [celebration, setCelebration] = useState<{ quest: Quest; coins: number } | null>(null);
   const [quickTask, setQuickTask] = useState('');
-  const [newTaskTitles, setNewTaskTitles] = useState<Record<string, string>>({});
 
   // Daily Rhythm (deen & body habits)
   const [habits, setHabits] = useState<Habit[]>([]);
   const [habitEdit, setHabitEdit] = useState(false);
   const [newHabit, setNewHabit] = useState('');
 
-  // New / edit quest sheet
+  // Quest Modal state
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingTask, setEditingTask] = useState<string | null>(null);
   const [qTitle, setQTitle] = useState('');
   const [qWhy, setQWhy] = useState('');
   const [qType, setQType] = useState<QuestType>('monthly');
@@ -54,6 +59,16 @@ export default function QuestsPage() {
   const [suggestedOn, setSuggestedOn] = useState<Set<number>>(new Set());
   const [breakingDown, setBreakingDown] = useState(false);
   const [creating, setCreating] = useState(false);
+
+  // Task Modal state (Professional task creation & editing)
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [editingTaskObj, setEditingTaskObj] = useState<QuestTask | null>(null);
+  const [tTitle, setTTitle] = useState('');
+  const [tQuestId, setTQuestId] = useState<string | null>(null);
+  const [tPriority, setTPriority] = useState<number>(2);
+  const [tDoDate, setTDoDate] = useState<string>('');
+  const [tNote, setTNote] = useState<string>('');
+  const [savingTask, setSavingTask] = useState(false);
 
   const load = useCallback(async () => {
     await refreshProfile();
@@ -101,22 +116,66 @@ export default function QuestsPage() {
 
   async function handleQuickAdd() {
     if (!quickTask.trim()) return;
-    const today = new Date();
-    const key = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    await addTask({ questId: null, title: quickTask.trim(), doDate: key });
+    await addTask({ questId: null, title: quickTask.trim(), doDate: formatDate(new Date()) });
     setQuickTask('');
     await load();
   }
 
-  async function handleAddToQuest(questId: string) {
-    const title = (newTaskTitles[questId] ?? '').trim();
-    if (!title) return;
-    await addTask({ questId, title });
-    setNewTaskTitles(prev => ({ ...prev, [questId]: '' }));
+  // Task Modal Handlers
+  function openNewTaskModal(presetQuestId?: string | null) {
+    setEditingTaskObj(null);
+    setTTitle('');
+    setTQuestId(presetQuestId ?? null);
+    setTPriority(2);
+    setTDoDate(formatDate(new Date()));
+    setTNote('');
+    setTaskModalOpen(true);
+  }
+
+  function openEditTaskModal(task: QuestTask) {
+    setEditingTaskObj(task);
+    setTTitle(task.title);
+    setTQuestId(task.questId);
+    setTPriority(task.priority);
+    setTDoDate(task.doDate ?? '');
+    setTNote(task.note ?? '');
+    setTaskModalOpen(true);
+  }
+
+  async function handleSaveTaskModal() {
+    if (!tTitle.trim() || savingTask) return;
+    setSavingTask(true);
+    if (editingTaskObj) {
+      await updateTask(editingTaskObj.id, {
+        title: tTitle.trim(),
+        questId: tQuestId,
+        priority: tPriority,
+        doDate: tDoDate || null,
+        note: tNote.trim() || null,
+      });
+    } else {
+      await addTask({
+        questId: tQuestId,
+        title: tTitle.trim(),
+        priority: tPriority,
+        doDate: tDoDate || null,
+      });
+    }
+    setSavingTask(false);
+    setTaskModalOpen(false);
     await load();
   }
 
-  function openEdit(q: Quest) {
+  async function handleDeleteTaskModal() {
+    if (!editingTaskObj || savingTask) return;
+    setSavingTask(true);
+    await deleteTask(editingTaskObj.id);
+    setSavingTask(false);
+    setTaskModalOpen(false);
+    await load();
+  }
+
+  function openEditQuest(q: Quest) {
     setEditingId(q.id);
     setQTitle(q.title);
     setQWhy(q.why);
@@ -127,7 +186,7 @@ export default function QuestsPage() {
     setSheetOpen(true);
   }
 
-  async function handleSaveEdit() {
+  async function handleSaveQuestEdit() {
     if (!editingId || !qTitle.trim() || creating) return;
     setCreating(true);
     await updateQuest(editingId, {
@@ -137,17 +196,6 @@ export default function QuestsPage() {
     setSheetOpen(false);
     setEditingId(null);
     setQTitle(''); setQWhy(''); setQTarget('');
-    await load();
-  }
-
-  async function cycleTaskPriority(t: QuestTask) {
-    const next = t.priority === 1 ? 2 : t.priority === 2 ? 3 : 1;
-    await updateTask(t.id, { priority: next });
-    await load();
-  }
-
-  async function rescheduleTask(t: QuestTask, date: string) {
-    await updateTask(t.id, { doDate: date || null });
     await load();
   }
 
@@ -186,8 +234,7 @@ export default function QuestsPage() {
     setCreating(true);
     const chosen = (suggested ?? []).filter((_, i) => suggestedOn.has(i)).map(t => {
       const due = new Date(Date.now() + t.dueOffsetDays * 86400000);
-      const dueKey = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`;
-      return { title: t.title, priority: t.priority, doDate: dueKey };
+      return { title: t.title, priority: t.priority, doDate: formatDate(due) };
     });
     await createQuest({
       title: qTitle.trim(),
@@ -205,9 +252,9 @@ export default function QuestsPage() {
 
   if (!ready) {
     return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
-        <div className="ghost-loader" style={{ fontSize: 40 }}>🎯</div>
-        <p style={{ color: 'var(--text2)', fontSize: 13 }}>Loading your quests...</p>
+      <div className="full-viewport-center">
+        <div className="ghost-loader" style={{ fontSize: 48 }}>🎯</div>
+        <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 12 }}>Loading your quests & goals...</p>
       </div>
     );
   }
@@ -257,7 +304,7 @@ export default function QuestsPage() {
           </div>
         )}
 
-        {/* DAILY RHYTHM — deen & body daily practices */}
+        {/* DAILY RHYTHM */}
         <div className="rhythm-card">
           <div className="arena-card-top">
             <span className="arena-metric" style={{ color: '#FFD700' }}>☪️ Daily Rhythm</span>
@@ -320,29 +367,55 @@ export default function QuestsPage() {
           )}
         </div>
 
-        {/* TODAY */}
+        {/* TODAY'S TASKS */}
         <div className="arena-card">
           <div className="arena-card-top">
-            <span className="arena-metric">Today</span>
-            <span className="arena-timer">{todayTasks.length === 0 ? 'all clear' : `${todayTasks.length} due`}</span>
+            <span className="arena-metric">Today&apos;s Moves</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span className="arena-timer">{todayTasks.length === 0 ? 'all clear' : `${todayTasks.length} due`}</span>
+              <button
+                type="button"
+                className="task-add-btn"
+                onClick={() => openNewTaskModal(null)}
+              >
+                + TASK
+              </button>
+            </div>
           </div>
           {todayTasks.length === 0 && (
-            <p className="arena-card-sub" style={{ textAlign: 'center' }}>Nothing due. Add a task or start a quest below.</p>
+            <p className="arena-card-sub" style={{ textAlign: 'center' }}>Nothing due today. Add a task or start a quest below.</p>
           )}
-          {todayTasks.map(t => (
-            <div className="task-row" key={t.id}>
-              <button className="task-check" onClick={() => handleToggle(t)} aria-label="complete task" />
-              <div className="task-body">
-                <span className="task-title">{t.title}</span>
-                <span className="task-meta">
-                  <span style={{ color: TASK_PRIORITY_META[t.priority].color }}>{TASK_PRIORITY_META[t.priority].label}</span>
-                  {questTitle(t.questId) && <> · {questTitle(t.questId)}</>}
-                  {t.doDate && <> · {daysUntil(t.doDate)}</>}
-                </span>
+          {todayTasks.map(t => {
+            const associatedQuest = questTitle(t.questId);
+            return (
+              <div className="task-row" key={t.id}>
+                <button
+                  className={`task-check ${t.isDone ? 'checked' : ''}`}
+                  onClick={() => handleToggle(t)}
+                  aria-label="complete task"
+                >{t.isDone ? '✓' : ''}</button>
+
+                <div className="task-body" onClick={() => openEditTaskModal(t)} style={{ cursor: 'pointer' }}>
+                  <span className="task-title">{t.title}</span>
+                  <div className="task-meta-row">
+                    <span className="priority-pill" style={{ color: TASK_PRIORITY_META[t.priority].color, borderColor: TASK_PRIORITY_META[t.priority].color }}>
+                      {TASK_PRIORITY_META[t.priority].label}
+                    </span>
+                    {associatedQuest && (
+                      <span className="goal-badge">🎯 {associatedQuest}</span>
+                    )}
+                    {t.doDate && <span className="date-badge">⏱ {daysUntil(t.doDate)}</span>}
+                  </div>
+                </div>
+
+                <button className="task-edit-trigger" onClick={() => openEditTaskModal(t)} aria-label="edit task">
+                  ✏️
+                </button>
               </div>
-            </div>
-          ))}
-          <div className="arena-code-row" style={{ marginTop: 10 }}>
+            );
+          })}
+
+          <div className="arena-code-row" style={{ marginTop: 12 }}>
             <input
               className="arena-input"
               style={{ letterSpacing: 0, textTransform: 'none', fontWeight: 600, fontSize: 14 }}
@@ -355,9 +428,11 @@ export default function QuestsPage() {
           </div>
         </div>
 
-        <button className="btn-primary" onClick={() => setSheetOpen(true)}>+ NEW QUEST</button>
+        <button className="btn-primary" onClick={() => { setEditingId(null); setQTitle(''); setQWhy(''); setQTarget(''); setSheetOpen(true); }}>
+          + NEW QUEST
+        </button>
 
-        {/* QUESTS by horizon */}
+        {/* QUESTS BY HORIZON */}
         {TYPE_ORDER.map(type => {
           const group = activeQuests.filter(q => q.questType === type);
           if (group.length === 0) return null;
@@ -395,46 +470,42 @@ export default function QuestsPage() {
                     {isOpen && (
                       <div className="quest-card-body">
                         {q.why && <p className="quest-why">&quot;{q.why}&quot;</p>}
+
                         {q.tasks.map(t => (
-                          <div key={t.id}>
-                            <div className={`task-row ${t.isDone ? 'done' : ''}`}>
-                              <button
-                                className={`task-check ${t.isDone ? 'checked' : ''}`}
-                                onClick={() => handleToggle(t)}
-                                aria-label="toggle task"
-                              >{t.isDone ? '✓' : ''}</button>
-                              <div className="task-body" onClick={() => setEditingTask(editingTask === t.id ? null : t.id)} style={{ cursor: 'pointer' }}>
-                                <span className="task-title">{t.title}</span>
-                                <span className="task-meta">
-                                  <span style={{ color: TASK_PRIORITY_META[t.priority].color }}>{TASK_PRIORITY_META[t.priority].label}</span>
-                                  {t.doDate && <> · {daysUntil(t.doDate)}</>}
+                          <div key={t.id} className={`task-row ${t.isDone ? 'done' : ''}`}>
+                            <button
+                              className={`task-check ${t.isDone ? 'checked' : ''}`}
+                              onClick={() => handleToggle(t)}
+                              aria-label="toggle task"
+                            >{t.isDone ? '✓' : ''}</button>
+
+                            <div className="task-body" onClick={() => openEditTaskModal(t)} style={{ cursor: 'pointer' }}>
+                              <span className="task-title">{t.title}</span>
+                              <div className="task-meta-row">
+                                <span className="priority-pill" style={{ color: TASK_PRIORITY_META[t.priority].color, borderColor: TASK_PRIORITY_META[t.priority].color }}>
+                                  {TASK_PRIORITY_META[t.priority].label}
                                 </span>
+                                {t.doDate && <span className="date-badge">⏱ {daysUntil(t.doDate)}</span>}
                               </div>
-                              <button className="task-delete" onClick={() => setEditingTask(editingTask === t.id ? null : t.id)} aria-label="edit task">⋯</button>
                             </div>
-                            {editingTask === t.id && (
-                              <div className="task-edit">
-                                <button className="task-edit-pri" style={{ color: TASK_PRIORITY_META[t.priority].color, borderColor: TASK_PRIORITY_META[t.priority].color }} onClick={() => cycleTaskPriority(t)}>
-                                  {TASK_PRIORITY_META[t.priority].label} ↻
-                                </button>
-                                <input type="date" className="task-edit-date" value={t.doDate ?? ''} onChange={e => rescheduleTask(t, e.target.value)} />
-                                <button className="task-edit-del" onClick={() => deleteTask(t.id).then(load)}>Delete</button>
-                              </div>
-                            )}
+
+                            <button className="task-edit-trigger" onClick={() => openEditTaskModal(t)} aria-label="edit task">
+                              ✏️
+                            </button>
                           </div>
                         ))}
+
                         <div className="arena-code-row">
-                          <input
-                            className="arena-input"
-                            style={{ letterSpacing: 0, textTransform: 'none', fontWeight: 600, fontSize: 14 }}
-                            placeholder="Add a task..."
-                            value={newTaskTitles[q.id] ?? ''}
-                            onChange={e => setNewTaskTitles(prev => ({ ...prev, [q.id]: e.target.value }))}
-                            onKeyDown={e => e.key === 'Enter' && handleAddToQuest(q.id)}
-                          />
-                          <button className="arena-btn accept" onClick={() => handleAddToQuest(q.id)}>+</button>
+                          <button
+                            type="button"
+                            className="quest-add-task-btn"
+                            onClick={() => openNewTaskModal(q.id)}
+                          >
+                            + Add Detailed Task
+                          </button>
+                          <button className="quest-edit-btn" onClick={() => openEditQuest(q)}>✏️ Edit Goal</button>
                         </div>
-                        <button className="quest-edit-btn" onClick={() => openEdit(q)}>✏️ Edit goal details</button>
+
                         <div className="arena-actions">
                           <button className="arena-btn accept" onClick={() => handleComplete(q)}>
                             COMPLETE {QUEST_TYPE_META[q.questType].emoji} +{QUEST_TYPE_META[q.questType].reward}
@@ -474,7 +545,129 @@ export default function QuestsPage() {
         )}
       </div>
 
-      {/* New / edit quest sheet */}
+      {/* PROFESSIONAL TASK EDITOR MODAL */}
+      {taskModalOpen && (
+        <div className="sheet-overlay" onClick={() => setTaskModalOpen(false)}>
+          <div className="sheet" onClick={e => e.stopPropagation()}>
+            <h3 className="sheet-title">
+              {editingTaskObj ? 'EDIT TASK DETAILS' : 'CREATE NEW TASK'}
+            </h3>
+
+            {/* TASK TITLE */}
+            <p className="sheet-label">TASK TITLE</p>
+            <input
+              className="arena-input"
+              style={{ width: '100%', letterSpacing: 0, textTransform: 'none', fontWeight: 600 }}
+              placeholder="e.g. Complete 50 Pushups or Research Meal Plan"
+              value={tTitle}
+              onChange={e => setTTitle(e.target.value)}
+              autoFocus
+            />
+
+            {/* ASSOCIATED GOAL / QUEST */}
+            <p className="sheet-label">ASSOCIATED GOAL / QUEST</p>
+            <select
+              className="nutri-select"
+              value={tQuestId ?? ''}
+              onChange={e => setTQuestId(e.target.value === '' ? null : e.target.value)}
+            >
+              <option value="">📌 Standalone Task (Daily Inbox)</option>
+              {activeQuests.map(q => (
+                <option key={q.id} value={q.id}>
+                  {QUEST_TYPE_META[q.questType].emoji} {q.title}
+                </option>
+              ))}
+            </select>
+
+            {/* PRIORITY LEVEL */}
+            <p className="sheet-label">PRIORITY LEVEL</p>
+            <div className="sheet-options">
+              {[
+                { pri: 3, label: '🔴 High (15 🪙)', color: '#FF4444' },
+                { pri: 2, label: '🟡 Medium (10 🪙)', color: '#FFD700' },
+                { pri: 1, label: '🟢 Low (5 🪙)', color: '#00FF87' },
+              ].map(p => (
+                <button
+                  key={p.pri}
+                  type="button"
+                  className={`sheet-opt ${tPriority === p.pri ? 'active' : ''}`}
+                  style={{
+                    borderColor: tPriority === p.pri ? p.color : undefined,
+                    color: tPriority === p.pri ? p.color : undefined
+                  }}
+                  onClick={() => setTPriority(p.pri)}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            {/* DEADLINE / SCHEDULE DATE */}
+            <p className="sheet-label">DEADLINE / SCHEDULE DATE</p>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+              {[
+                { label: 'Today', date: formatDate(new Date()) },
+                { label: 'Tomorrow', date: formatDate(new Date(Date.now() + 86400000)) },
+                { label: 'Next Week', date: formatDate(new Date(Date.now() + 7 * 86400000)) },
+                { label: 'No Date', date: '' },
+              ].map(quick => (
+                <button
+                  key={quick.label}
+                  type="button"
+                  className={`chip ${tDoDate === quick.date ? 'active' : ''}`}
+                  onClick={() => setTDoDate(quick.date)}
+                >
+                  {quick.label}
+                </button>
+              ))}
+            </div>
+            <input
+              type="date"
+              className="nutri-num"
+              style={{ colorScheme: 'dark', width: '100%' }}
+              value={tDoDate}
+              onChange={e => setTDoDate(e.target.value)}
+            />
+
+            {/* TASK NOTES */}
+            <p className="sheet-label">NOTES / DESCRIPTION (OPTIONAL)</p>
+            <textarea
+              className="arena-input"
+              rows={2}
+              style={{ width: '100%', letterSpacing: 0, textTransform: 'none', fontWeight: 500, fontSize: 13, resize: 'none', fontFamily: 'inherit' }}
+              placeholder="Add key details or steps..."
+              value={tNote}
+              onChange={e => setTNote(e.target.value)}
+            />
+
+            {/* ACTION BUTTONS */}
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              {editingTaskObj && (
+                <button
+                  type="button"
+                  className="btn-outline"
+                  style={{ borderColor: '#FF4444', color: '#FF4444', flex: 1 }}
+                  onClick={handleDeleteTaskModal}
+                  disabled={savingTask}
+                >
+                  DELETE
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn-primary"
+                style={{ flex: 2 }}
+                disabled={!tTitle.trim() || savingTask}
+                onClick={handleSaveTaskModal}
+              >
+                {savingTask ? 'SAVING...' : editingTaskObj ? 'SAVE CHANGES ✓' : 'CREATE TASK 🎯'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NEW / EDIT QUEST SHEET */}
       {sheetOpen && (
         <div className="sheet-overlay" onClick={() => { setSheetOpen(false); setEditingId(null); }}>
           <div className="sheet" onClick={e => e.stopPropagation()}>
@@ -483,7 +676,7 @@ export default function QuestsPage() {
             <p className="sheet-label">WHAT&apos;S THE GOAL?</p>
             <input
               className="arena-input" style={{ width: '100%', letterSpacing: 0, textTransform: 'none', fontWeight: 600 }}
-              placeholder="e.g. Launch RetailGPT"
+              placeholder="e.g. Bench Press 100kg"
               value={qTitle} onChange={e => setQTitle(e.target.value)}
             />
 
@@ -506,7 +699,7 @@ export default function QuestsPage() {
 
             <p className="sheet-label">TARGET DATE (OPTIONAL)</p>
             <input
-              type="date" className="nutri-num" style={{ colorScheme: 'dark' }}
+              type="date" className="nutri-num" style={{ colorScheme: 'dark', width: '100%' }}
               value={qTarget} onChange={e => setQTarget(e.target.value)}
             />
 
@@ -555,7 +748,7 @@ export default function QuestsPage() {
               </>
             )}
 
-            <button className="btn-primary" style={{ marginTop: 16 }} disabled={!qTitle.trim() || creating} onClick={editingId ? handleSaveEdit : handleCreateQuest}>
+            <button className="btn-primary" style={{ marginTop: 16 }} disabled={!qTitle.trim() || creating} onClick={editingId ? handleSaveQuestEdit : handleCreateQuest}>
               {creating ? 'SAVING...' : editingId ? 'SAVE CHANGES ✓' : 'START QUEST 🎯'}
             </button>
           </div>

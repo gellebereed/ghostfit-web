@@ -81,7 +81,7 @@ export default function InstallPrompt() {
           </button>
         )}
         <button
-          onPointerDown={() => {
+          onClick={() => {
             setShowPWABanner(false);
             localStorage.setItem('pwa_banner_dismissed', 'true');
           }}
