@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getProfile, saveProfile, savePlan } from '@/lib/db';
+import { getProfile, saveProfile } from '@/lib/db';
+import { generateAndSavePlan } from '@/lib/plan-actions';
 import { getAppSettings, saveSettings } from '@/lib/sound';
 import { supabase } from '@/lib/supabase';
 import { applyBaseTheme, BASE_THEMES, getSavedTheme } from '@/lib/theme';
@@ -88,17 +89,14 @@ export default function SettingsPage() {
     setShowRegenConfirm(false);
     setRegenerating(true);
     try {
-      const res = await fetch('/api/generate-plan', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ equipment, goal }),
-      });
-      if (res.ok) {
-        const plan = await res.json();
-        await savePlan({ ...plan, createdAt: Date.now() });
-        const profile = await getProfile();
-        if (profile) await saveProfile({ ...profile, goal, currentWeek: 1 });
-      }
-    } catch {}
+      // A new goal means new rep ranges, rests and split — the progression
+      // ramp restarts rather than resuming mid-cycle on different prescriptions.
+      await generateAndSavePlan({ equipment, goal, restartCycle: true });
+      const profile = await getProfile();
+      if (profile) await saveProfile({ ...profile, goal, currentWeek: 1 });
+    } catch (err) {
+      console.error('Plan regeneration failed:', err);
+    }
     setRegenerating(false);
     router.push('/');
   }

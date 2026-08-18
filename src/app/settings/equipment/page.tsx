@@ -2,7 +2,8 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getProfile, saveProfile, savePlan } from '@/lib/db';
+import { getProfile, saveProfile } from '@/lib/db';
+import { generateAndSavePlan } from '@/lib/plan-actions';
 import { EQUIPMENT_ICONS, ALL_EQUIPMENT } from '@/lib/equipment-icons';
 
 export default function EquipmentEditorPage() {
@@ -90,16 +91,13 @@ export default function EquipmentEditorPage() {
     setRegenerating(true);
     const profile = await getProfile();
     try {
-      const res = await fetch('/api/generate-plan', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ equipment, goal: profile?.goal || 'fitness' }),
-      });
-      if (res.ok) {
-        const plan = await res.json();
-        await savePlan({ ...plan, createdAt: Date.now() });
-        if (profile) await saveProfile({ ...profile, equipment, currentWeek: 1 });
-      }
-    } catch {}
+      // New equipment unlocks different exercises — rebuild from week 1 so the
+      // volume ramp matches the lifts the user will actually be doing.
+      await generateAndSavePlan({ equipment, goal: profile?.goal || 'fitness', restartCycle: true });
+      if (profile) await saveProfile({ ...profile, equipment, currentWeek: 1 });
+    } catch (err) {
+      console.error('Plan regeneration failed:', err);
+    }
     setRegenerating(false);
     setShowRegenBanner(false);
     router.push('/');

@@ -1,5 +1,6 @@
 'use client';
 import BottomNav from '@/components/BottomNav';
+import { PageSkeleton } from '@/components/Skeleton';
 import Celebration from '@/components/Celebration';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -161,10 +162,10 @@ export default function ArenaPage() {
 
   if (!ready) {
     return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
-        <div className="ghost-loader" style={{ fontSize: 40 }}>⚔️</div>
-        <p style={{ color: 'var(--text2)', fontSize: 13 }}>Entering the arena...</p>
-      </div>
+      <>
+        <PageSkeleton cards={3} cardHeight={128} />
+        <BottomNav active="arena" />
+      </>
     );
   }
 

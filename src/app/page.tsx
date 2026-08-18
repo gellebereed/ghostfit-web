@@ -13,9 +13,16 @@ import { getQuests, selectTodayTasks } from '@/lib/quests';
 import { getHabits } from '@/lib/habits';
 import { getActiveChallengeCount } from '@/lib/social';
 
+import { getLayoffAssessment, markComebackPrompted, maybeAdvanceWeek, shouldShowComeback, type LayoffAssessment } from '@/lib/adherence';
+import { hydrateProgramState } from '@/lib/program-state';
+import { PHASE_META } from '@/lib/types';
+
 import { useAppStore } from '@/store/appStore';
 import { Avatar } from '@/components/Avatar';
+import ComebackModal from '@/components/ComebackModal';
 import WelcomeOverlay from '@/components/WelcomeOverlay';
+import Ring from '@/components/Ring';
+import { HomeSkeleton } from '@/components/Skeleton';
 
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -33,19 +40,17 @@ function formatExerciseDetail(exercise: Exercise): string {
     return `${exercise.sets ?? 3} × ${display}`;
   }
   
-  const reps = exercise.reps ?? 10;
   const sets = exercise.sets ?? 3;
-  if (m === 'bodyweight_reps' || m === 'reps_only') {
-    return `${sets} × ${reps}`;
+  if (exercise.repMin && exercise.repMax && exercise.repMin !== exercise.repMax) {
+    return `${sets} × ${exercise.repMin}–${exercise.repMax}`;
   }
-  return `${sets} × ${reps}`;
+  return `${sets} × ${exercise.reps ?? 10}`;
 }
 
 export default function HomePage() {
   const router = useRouter();
   const { profile, refreshProfile } = useAppStore();
   const [ready, setReady] = useState(false);
-  const [showLoader, setShowLoader] = useState(false);
   const [plan, setPlan] = useState<WorkoutPlan | null>(null);
   const [today, setToday] = useState<WorkoutDay | null>(null);
   const [battleResult, setBattleResult] = useState<'win' | 'loss' | 'none'>('none');
@@ -57,6 +62,7 @@ export default function HomePage() {
   const [taunt, setTaunt] = useState('');
   const [daysAway, setDaysAway] = useState<number | null>(null);
   const [freshStart, setFreshStart] = useState(false);
+  const [comeback, setComeback] = useState<LayoffAssessment | null>(null);
   const [dash, setDash] = useState<{
     fuel: { has: boolean; kcal: number; target: number } | null;
     quests: { dueToday: number; active: number } | null;
@@ -66,9 +72,6 @@ export default function HomePage() {
 
   useEffect(() => {
     let mounted = true;
-    const loaderTimer = setTimeout(() => {
-      if (mounted) setShowLoader(true);
-    }, 100);
 
     async function init() {
       try {
@@ -78,6 +81,20 @@ export default function HomePage() {
           router.replace('/onboarding');
           return;
         }
+        await hydrateProgramState();
+
+        // Two automatic behaviours run before the dashboard paints:
+        //   1. a long absence rebuilds the plan (after asking, below)
+        //   2. an ordinary week rolls over on its own, so volume keeps ramping
+        //      and the deload lands on schedule without the user doing anything
+        const assessment = await getLayoffAssessment();
+        if (!assessment.shouldPrompt) {
+          await maybeAdvanceWeek();
+        } else if (shouldShowComeback(assessment)) {
+          markComebackPrompted(assessment);
+          if (mounted) setComeback(assessment);
+        }
+
         const p = await getCurrentPlan();
 
         const [result, wc, s, sessions] = await Promise.all([
@@ -143,16 +160,12 @@ export default function HomePage() {
       } catch (err) {
         console.error('GhostFit init error:', err);
       } finally {
-        if (mounted) {
-          setReady(true);
-          clearTimeout(loaderTimer);
-        }
+        if (mounted) setReady(true);
       }
     }
     init();
     return () => {
       mounted = false;
-      clearTimeout(loaderTimer);
     };
   }, [router, refreshProfile]);
 
@@ -187,24 +200,42 @@ export default function HomePage() {
     return () => { live = false; };
   }, []);
 
+  // Skeleton over spinner: the page keeps its shape while data lands, so
+  // nothing reflows on arrival and the wait reads as loading, not blocking.
   if (!ready) {
     return (
-      <div className="full-viewport-center">
-        <div className="ghost-loader" style={{ fontSize: 56 }}>👻</div>
-        <h2 style={{ fontSize: 20, fontWeight: 900, marginTop: 16, color: 'var(--text)', letterSpacing: 2 }}>SUMMONING YOUR GHOST...</h2>
-        <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 6 }}>Preparing your combat arena</p>
-      </div>
+      <>
+        <HomeSkeleton />
+        <BottomNav active="home" />
+      </>
     );
   }
 
   const isRest = today?.isRest;
   const allDone = today && !isRest && today.exercises.every(ex => completed.has(ex.name));
+  // Training days the plan actually asks for — the ring measures against the
+  // real commitment, not a flat 7.
+  const weekTarget = plan?.days.filter(d => !d.isRest).length || 7;
   // Ghost feeds after 2+ days away (capped visual power at 7 days)
   const ghostFed = !isRest && !allDone && daysAway !== null && daysAway >= 2;
   const ghostPower = ghostFed ? Math.min(daysAway!, 7) : 0;
 
+  const phaseMeta = plan?.meta ? PHASE_META[plan.meta.phase] : null;
+
   return (
     <>
+      {comeback && (
+        <ComebackModal
+          assessment={comeback}
+          onDismiss={() => setComeback(null)}
+          onResolved={() => {
+            setComeback(null);
+            // The plan changed underneath us — reload so today's card is right.
+            window.location.reload();
+          }}
+        />
+      )}
+
       <WelcomeOverlay
         profile={profile}
         streak={streak}
@@ -223,8 +254,21 @@ export default function HomePage() {
       </header>
 
       <div className="greeting">
-        <h1>{getGreeting()}, let&apos;s go 💪</h1>
-        <p>Week {plan?.weekNumber || 1} · {today?.focus || 'Rest'} today</p>
+        <p className="hero-kicker">{getGreeting()}</p>
+        {/* Deliberately does not claim a result — the battle card below owns
+            the win/loss verdict, and the two must never contradict. */}
+        <h1 className="hero-title">
+          {isRest ? <>Recover<br /><span className="accent">and rebuild</span></>
+            : allDone ? <>Today is<br /><span className="accent">done</span></>
+            : <>Today you<br /><span className="accent">outrun it</span></>}
+        </h1>
+        <p className="greeting-meta">
+          Week {plan?.weekNumber || 1} · {today?.focus || 'Rest'}
+          {phaseMeta && <> · {phaseMeta.emoji} {phaseMeta.label}</>}
+        </p>
+        {phaseMeta && plan?.meta && (
+          <p className="greeting-phase">{plan.meta.isDeload ? phaseMeta.blurb : plan.meta.coachNotes[0]}</p>
+        )}
         {profile?.commitmentTime && !isRest && !allDone && (
           <p className="commitment-line">
             {isPastTime(profile.commitmentTime)
@@ -333,7 +377,8 @@ export default function HomePage() {
               <h2 className="today-hero-focus">{today.focus}</h2>
               <div className="today-hero-stats">
                 <span>🏋️ {today.exercises.length} exercises</span>
-                <span>⏱ ~{today.exercises.length * 8} mins</span>
+                <span>⏱ ~{today.estimatedMinutes ?? today.exercises.length * 8} mins</span>
+                {today.warmup?.length ? <span>🔥 warm-up included</span> : null}
               </div>
             </div>
           </div>
@@ -364,20 +409,39 @@ export default function HomePage() {
         </div>
       )}
 
-      <div className="week-row">
-        {DAYS.map((d, i) => {
-          const isToday = new Date().getDay() === i;
-          const isDone = completedDays.has(i);
-          const isSunday = i === 0;
-          return (
-            <div className="day-chip" key={d}>
-              <div className={`day-dot ${isToday ? 'today' : ''} ${isDone ? 'done' : ''} ${isSunday && !isDone ? 'rest' : ''}`}>
-                {isDone ? '✓' : isSunday ? '😴' : ''}
+      <div className="week-panel">
+        <div className="week-panel-top">
+          <Ring
+            value={weekTarget ? completedDays.size / weekTarget : 0}
+            size={92}
+            stroke={9}
+            label={`${completedDays.size}`}
+            caption={`of ${weekTarget}`}
+          />
+          <div className="week-panel-body">
+            <p className="week-panel-title">This week</p>
+            <p className="week-panel-sub">
+              {completedDays.size >= weekTarget
+                ? 'Week complete. The ghost never stood a chance.'
+                : `${weekTarget - completedDays.size} more ${weekTarget - completedDays.size === 1 ? 'session' : 'sessions'} to close it out.`}
+            </p>
+          </div>
+        </div>
+        <div className="week-row">
+          {DAYS.map((d, i) => {
+            const isToday = new Date().getDay() === i;
+            const isDone = completedDays.has(i);
+            const isSunday = i === 0;
+            return (
+              <div className="day-chip" key={d}>
+                <div className={`day-dot ${isToday ? 'today' : ''} ${isDone ? 'done' : ''} ${isSunday && !isDone ? 'rest' : ''}`}>
+                  {isDone ? '✓' : isSunday ? '😴' : ''}
+                </div>
+                {d}
               </div>
-              {d}
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       <p className="dash-section-title">Your day at a glance</p>
@@ -391,7 +455,7 @@ export default function HomePage() {
           </div>
           {dash.fuel?.has ? (
             <>
-              <span className="dash-tile-stat">{dash.fuel.kcal}<span style={{ fontSize: 13, color: 'var(--text3)', fontWeight: 600 }}> / {dash.fuel.target} kcal</span></span>
+              <span className="dash-tile-stat">{dash.fuel.kcal}<span style={{ fontSize: 13, color: 'var(--text2)', fontWeight: 600 }}> / {dash.fuel.target} kcal</span></span>
               <div className="dash-mini-track">
                 <div className="dash-mini-fill" style={{ width: `${dash.fuel.target ? Math.min(100, (dash.fuel.kcal / dash.fuel.target) * 100) : 0}%`, background: 'var(--accent)' }} />
               </div>
@@ -410,7 +474,7 @@ export default function HomePage() {
           </div>
           {dash.quests ? (
             <>
-              <span className="dash-tile-stat">{dash.quests.dueToday}<span style={{ fontSize: 13, color: 'var(--text3)', fontWeight: 600 }}> due today</span></span>
+              <span className="dash-tile-stat">{dash.quests.dueToday}<span style={{ fontSize: 13, color: 'var(--text2)', fontWeight: 600 }}> due today</span></span>
               <span className="dash-tile-sub">{dash.quests.active} active {dash.quests.active === 1 ? 'quest' : 'quests'} in motion</span>
             </>
           ) : <span className="dash-tile-sub">Loading…</span>}
@@ -425,7 +489,7 @@ export default function HomePage() {
           </div>
           {dash.rhythm && dash.rhythm.total > 0 ? (
             <>
-              <span className="dash-tile-stat">{dash.rhythm.done}<span style={{ fontSize: 13, color: 'var(--text3)', fontWeight: 600 }}> / {dash.rhythm.total} today</span></span>
+              <span className="dash-tile-stat">{dash.rhythm.done}<span style={{ fontSize: 13, color: 'var(--text2)', fontWeight: 600 }}> / {dash.rhythm.total} today</span></span>
               <div className="dash-mini-track">
                 <div className="dash-mini-fill" style={{ width: `${(dash.rhythm.done / dash.rhythm.total) * 100}%`, background: '#FFD700' }} />
               </div>
@@ -444,7 +508,7 @@ export default function HomePage() {
           </div>
           {dash.challenges > 0 ? (
             <>
-              <span className="dash-tile-stat">{dash.challenges}<span style={{ fontSize: 13, color: 'var(--text3)', fontWeight: 600 }}> live {dash.challenges === 1 ? 'battle' : 'battles'}</span></span>
+              <span className="dash-tile-stat">{dash.challenges}<span style={{ fontSize: 13, color: 'var(--text2)', fontWeight: 600 }}> live {dash.challenges === 1 ? 'battle' : 'battles'}</span></span>
               <span className="dash-tile-sub">Keep the pressure on. Every rep counts.</span>
             </>
           ) : (

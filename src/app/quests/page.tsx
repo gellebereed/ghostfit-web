@@ -1,5 +1,6 @@
 'use client';
 import BottomNav from '@/components/BottomNav';
+import { PageSkeleton } from '@/components/Skeleton';
 import { useCallback, useEffect, useState } from 'react';
 import { useAppStore } from '@/store/appStore';
 import {
@@ -252,10 +253,10 @@ export default function QuestsPage() {
 
   if (!ready) {
     return (
-      <div className="full-viewport-center">
-        <div className="ghost-loader" style={{ fontSize: 48 }}>🎯</div>
-        <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 12 }}>Loading your quests & goals...</p>
-      </div>
+      <>
+        <PageSkeleton cards={4} cardHeight={112} hero={96} />
+        <BottomNav active="quests" />
+      </>
     );
   }
 
@@ -332,6 +333,7 @@ export default function QuestsPage() {
             </div>
           ) : (
             <>
+              <div className="rhythm-rows">
               {habits.map(h => (
                 <div className="rhythm-row" key={h.id}>
                   <button
@@ -347,6 +349,7 @@ export default function QuestsPage() {
                   )}
                 </div>
               ))}
+              </div>
               {habits.length > 0 && habits.every(h => h.doneToday) && (
                 <p className="rhythm-alldone">🌟 Full rhythm today. This is who you are now.</p>
               )}
@@ -385,6 +388,7 @@ export default function QuestsPage() {
           {todayTasks.length === 0 && (
             <p className="arena-card-sub" style={{ textAlign: 'center' }}>Nothing due today. Add a task or start a quest below.</p>
           )}
+          <div className="task-list">
           {todayTasks.map(t => {
             const associatedQuest = questTitle(t.questId);
             return (
@@ -414,6 +418,7 @@ export default function QuestsPage() {
               </div>
             );
           })}
+          </div>
 
           <div className="arena-code-row" style={{ marginTop: 12 }}>
             <input

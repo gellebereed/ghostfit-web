@@ -1,5 +1,6 @@
 'use client';
 import BottomNav from '@/components/BottomNav';
+import { PageSkeleton } from '@/components/Skeleton';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -63,7 +64,14 @@ export default function ProfilePage() {
     }
   }
 
-  if (!mounted || !profile) return <div className="loading"><div className="loader" /></div>;
+  if (!mounted || !profile) {
+    return (
+      <>
+        <PageSkeleton cards={4} cardHeight={88} hero={180} titleWidth="40%" />
+        <BottomNav active="profile" />
+      </>
+    );
+  }
 
   const nextTierThreshold = TIER_THRESHOLDS[tier] || 25;
   const prevTierThreshold = TIER_THRESHOLDS[tier - 1] || 0;

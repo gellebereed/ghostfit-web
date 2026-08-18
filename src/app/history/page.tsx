@@ -58,7 +58,7 @@ export default function HistoryPage() {
         <div className="empty"><div className="icon">👻</div><h3>No Battles Yet</h3><p>Complete your first exercise to see history</p></div>
       ) : (
         Object.entries(grouped).map(([label, items]) => (
-          <div key={label}>
+          <div key={label} className="hist-group">
             <div className="date-group"><div className="date-label">{label}</div></div>
             {items.map(s => (
               <div key={s.id} className={`hist-card ${s.result === 'win' ? 'win-border' : s.result === 'loss' ? 'loss-border' : 'inc-border'}`}>

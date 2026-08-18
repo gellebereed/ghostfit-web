@@ -8,6 +8,29 @@ export interface Exercise {
   type: 'strength' | 'cardio';
   metricType: 'weight_reps' | 'bodyweight_reps' | 'duration' | 'cardio' | 'reps_only';
   durationSeconds: number | null;
+
+  // ── Program-engine fields (optional: legacy plans predate them) ──────────
+  /** Stable library id — lets the engine recognise its own picks on re-read. */
+  libraryId?: string;
+  /** Prescribed rest between sets, in seconds. */
+  restSeconds?: number;
+  /** Reps left in the tank at the end of a set. Lower = closer to failure. */
+  targetRir?: number;
+  /** Eccentric-pause-concentric-pause, e.g. "3-1-1-0". */
+  tempo?: string;
+  /** Inclusive rep window for double progression. */
+  repMin?: number;
+  repMax?: number;
+  /** Ramp-up sets before the working sets (heavy compounds only). */
+  warmupSets?: number;
+  movementPattern?: MovementPattern;
+  primaryMuscles?: MuscleGroup[];
+  secondaryMuscles?: MuscleGroup[];
+  block?: ExerciseBlock;
+  /** One-line technique or intent cue shown during the set. */
+  coachNote?: string;
+  /** Shared token = perform back to back with minimal rest. */
+  supersetGroup?: string;
 }
 
 export interface WorkoutDay {
@@ -16,12 +39,23 @@ export interface WorkoutDay {
   focus: string;
   isRest: boolean;
   exercises: Exercise[];
+
+  // ── Program-engine fields ────────────────────────────────────────────────
+  sessionType?: 'strength' | 'conditioning' | 'active_recovery' | 'rest';
+  warmup?: WarmupStep[];
+  cooldown?: CooldownStep[];
+  estimatedMinutes?: number;
+  /** 'Heavy' | 'Moderate' | 'Light' — sets expectation before they start. */
+  intensityLabel?: string;
+  targetMuscles?: MuscleGroup[];
+  coachNote?: string;
 }
 
 export interface WorkoutPlan {
   weekNumber: number;
   days: WorkoutDay[];
   createdAt: number;
+  meta?: PlanMeta;
 }
 
 export interface GhostSession {
@@ -289,4 +323,121 @@ export function calculateTier(totalWins: number): number {
 export function getTierLabel(tier: number): string {
   const labels = ['', 'Rookie', 'Fighter', 'Warrior', 'Champion', 'Legend'];
   return labels[tier] || 'Rookie';
+}
+
+// ─── Training Science Layer ──────────────────────────────────────────────────
+// Added by the program engine. Every field is optional on the existing
+// interfaces above so plans generated before the engine still load.
+
+export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced';
+
+/** The nine fundamental human movement patterns a balanced program covers. */
+export type MovementPattern =
+  | 'horizontal_push'
+  | 'vertical_push'
+  | 'horizontal_pull'
+  | 'vertical_pull'
+  | 'squat'
+  | 'hinge'
+  | 'lunge'
+  | 'carry'
+  | 'core_anti_extension'
+  | 'core_anti_rotation'
+  | 'core_flexion'
+  | 'isolation_arm'
+  | 'isolation_shoulder'
+  | 'isolation_leg'
+  | 'calf'
+  | 'conditioning';
+
+export type MuscleGroup =
+  | 'chest' | 'back' | 'lats' | 'traps' | 'shoulders' | 'rear_delts'
+  | 'biceps' | 'triceps' | 'forearms'
+  | 'quads' | 'hamstrings' | 'glutes' | 'adductors' | 'calves'
+  | 'core' | 'obliques' | 'lower_back' | 'hip_flexors'
+  | 'heart';
+
+export const MUSCLE_LABELS: Record<MuscleGroup, string> = {
+  chest: 'Chest', back: 'Upper Back', lats: 'Lats', traps: 'Traps',
+  shoulders: 'Shoulders', rear_delts: 'Rear Delts',
+  biceps: 'Biceps', triceps: 'Triceps', forearms: 'Forearms',
+  quads: 'Quads', hamstrings: 'Hamstrings', glutes: 'Glutes',
+  adductors: 'Adductors', calves: 'Calves',
+  core: 'Core', obliques: 'Obliques', lower_back: 'Lower Back',
+  hip_flexors: 'Hip Flexors', heart: 'Cardiovascular',
+};
+
+/** Where an exercise sits in the session — drives ordering and rest length. */
+export type ExerciseBlock =
+  | 'primary'      // heaviest compound, done fresh
+  | 'secondary'    // second compound
+  | 'accessory'    // isolation / smaller compound
+  | 'core'
+  | 'conditioning'
+  | 'finisher';
+
+/** RAMP protocol stages — Raise, Activate, Mobilise, Potentiate. */
+export type WarmupStage = 'raise' | 'mobilise' | 'activate' | 'potentiate';
+
+export interface WarmupStep {
+  id: string;
+  name: string;
+  stage: WarmupStage;
+  durationSeconds: number;
+  reps: number | null;
+  perSide: boolean;
+  cue: string;
+  targets: MuscleGroup[];
+}
+
+export type CooldownKind = 'breathing' | 'static' | 'foam_roll';
+
+export interface CooldownStep {
+  id: string;
+  name: string;
+  kind: CooldownKind;
+  holdSeconds: number;
+  perSide: boolean;
+  cue: string;
+  /** Why this stretch is here — the "I don't know what to do after" answer. */
+  relief: string;
+  targets: MuscleGroup[];
+}
+
+export type TrainingPhase =
+  | 'foundation'       // week 1 of a brand-new program — technique + tissue prep
+  | 'accumulation'     // volume climbs
+  | 'intensification'  // volume holds, intensity climbs
+  | 'deload'           // planned recovery week
+  | 'reentry';         // returning after a layoff
+
+export const PHASE_META: Record<TrainingPhase, { label: string; emoji: string; blurb: string }> = {
+  foundation:      { label: 'Foundation',      emoji: '🧱', blurb: 'Groove the patterns. Leave reps in the tank.' },
+  accumulation:    { label: 'Accumulation',    emoji: '📈', blurb: 'Volume climbs. This is where growth is bought.' },
+  intensification: { label: 'Intensification', emoji: '🔥', blurb: 'Same volume, heavier bar. Push closer to failure.' },
+  deload:          { label: 'Deload',          emoji: '🌙', blurb: 'Planned recovery. Half the work, all the adaptation.' },
+  reentry:         { label: 'Re-entry',        emoji: '🌱', blurb: 'Rebuilding after time off. Soreness control first.' },
+};
+
+export interface PlanMeta {
+  engineVersion: number;
+  splitId: string;
+  splitName: string;
+  splitRationale: string;
+  goal: string;
+  experience: ExperienceLevel;
+  trainingDays: number;
+  sessionMinutes: number;
+  /** Position inside the current mesocycle (1-indexed). */
+  mesocycleWeek: number;
+  mesocycleLength: number;
+  phase: TrainingPhase;
+  isDeload: boolean;
+  volumeMultiplier: number;
+  intensityMultiplier: number;
+  /** Hard sets per muscle group across the week — the volume audit. */
+  weeklySets: Partial<Record<MuscleGroup, number>>;
+  coachNotes: string[];
+  /** Set when the plan was rebuilt by the layoff engine. */
+  reentryFromDaysOff?: number;
 }

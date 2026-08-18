@@ -88,6 +88,9 @@ export function sanitizeExercise(
   }
 
   return {
+    // Preserve program-engine fields (rest, RIR, muscles, cues) — sanitising
+    // must never strip the coaching data off an exercise.
+    ...ex,
     name: exerciseName,
     equipment,
     metricType,

@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ALL_EQUIPMENT, EQUIPMENT_ICONS } from '@/lib/equipment-icons';
-import { getProfile, savePlan, saveProfile } from '@/lib/db';
-import { createStarterPlan } from '@/lib/starter-plan';
+import { getProfile, saveProfile } from '@/lib/db';
+import { generateAndSavePlan } from '@/lib/plan-actions';
+import { resetProgramClock, saveProgramState } from '@/lib/program-state';
 
 const DRAFT_KEY = 'ghostfit_onboarding_draft_v2';
 
@@ -130,34 +131,29 @@ export default function OnboardingPage() {
 
   async function finishOnboarding() {
     setBuilding(true);
-    setBuildStatus('Building your training rhythm');
+    setBuildStatus('Choosing the split that fits your week');
     const safeEquipment = draft.equipment.length ? draft.equipment : ['Bodyweight Only'];
-    let plan = createStarterPlan(safeEquipment, draft.goal, draft.trainingDays);
-    try {
-      setBuildStatus('Personalizing exercises to your equipment');
-      const response = await fetch('/api/generate-plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          equipment: safeEquipment,
-          goal: draft.goal,
-          experience: draft.experience,
-          trainingDays: draft.trainingDays,
-          sessionMinutes: draft.sessionMinutes,
-        }),
-      });
-      if (response.ok) {
-        const generated = await response.json();
-        if (Array.isArray(generated.days) && generated.days.length === 7) {
-          plan = { ...generated, createdAt: Date.now() };
-        }
-      }
-    } catch {
-      setBuildStatus('Using your ready-to-train starter plan');
-    }
+
+    // The engine runs on-device: no network, no model, no failure mode where
+    // the user lands on a generic plan because a request timed out.
+    setBuildStatus('Programming your sets, rest and warm-ups');
+    resetProgramClock(null);
+    saveProgramState({
+      experience: draft.experience === 'intermediate' || draft.experience === 'advanced' ? draft.experience : 'beginner',
+      trainingDays: draft.trainingDays,
+      sessionMinutes: draft.sessionMinutes,
+      weekStartedAt: Date.now(),
+    });
+    await generateAndSavePlan({
+      equipment: safeEquipment,
+      goal: draft.goal,
+      experience: draft.experience,
+      trainingDays: draft.trainingDays,
+      sessionMinutes: draft.sessionMinutes,
+      restartCycle: true,
+    });
 
     const name = (draft.name.trim() || 'FIGHTER').toUpperCase().slice(0, 16);
-    await savePlan(plan);
     await saveProfile({
       equipment: safeEquipment,
       goal: draft.goal || 'fitness',
@@ -177,11 +173,6 @@ export default function OnboardingPage() {
       ghostStyle: 'warrior',
       ghostAuraColor: '#FFFFFF',
     });
-    localStorage.setItem('ghostfit_training_preferences', JSON.stringify({
-      experience: draft.experience,
-      trainingDays: draft.trainingDays,
-      sessionMinutes: draft.sessionMinutes,
-    }));
     localStorage.removeItem(DRAFT_KEY);
     router.replace('/');
   }

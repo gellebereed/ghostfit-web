@@ -8,6 +8,7 @@
 import { supabase } from './supabase';
 import { WorkoutPlan, WorkoutDay, GhostSession, UserProfile, ExerciseInfo } from './types';
 import { sanitizeExercise } from '../services/openai';
+import { enrichPlan } from './plan-enrichment';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -225,7 +226,33 @@ export async function getDaysSinceLastWorkout(): Promise<number | null> {
 
 // ─── Workout Plans ────────────────────────────────────────────────────────────
 
+/**
+ * The `days` column is jsonb, so plan-level metadata rides along inside it as
+ * `{ __plan: 1, meta, days }`. Older rows hold a bare array and still load —
+ * no migration required for the engine's metadata to persist.
+ */
+interface PlanEnvelope {
+  __plan: 1;
+  meta: WorkoutPlan['meta'];
+  days: WorkoutDay[];
+}
+
+function unwrapDays(raw: unknown): { days: WorkoutDay[]; meta: WorkoutPlan['meta'] } {
+  if (Array.isArray(raw)) return { days: raw as WorkoutDay[], meta: undefined };
+  const envelope = raw as Partial<PlanEnvelope> | null;
+  if (envelope && Array.isArray(envelope.days)) {
+    return { days: envelope.days, meta: envelope.meta };
+  }
+  return { days: [], meta: undefined };
+}
+
 export async function savePlan(plan: WorkoutPlan): Promise<void> {
+  // Cache first so the UI reflects the new plan even if the write is slow.
+  memoryCache.plan = plan;
+  try {
+    localStorage.setItem('ghostfit_active_plan', JSON.stringify(plan));
+  } catch { /* quota — the memory cache still holds it */ }
+
   const userId = await uid();
   if (!userId) return;
 
@@ -235,14 +262,17 @@ export async function savePlan(plan: WorkoutPlan): Promise<void> {
     .update({ is_active: false })
     .eq('user_id', userId);
 
+  const payload: PlanEnvelope | WorkoutDay[] = plan.meta
+    ? { __plan: 1, meta: plan.meta, days: plan.days }
+    : plan.days;
+
   await supabase.from('workout_plans').insert({
     user_id: userId,
     week_number: plan.weekNumber,
-    days: plan.days,
+    days: payload,
     is_active: true,
     created_at: new Date(plan.createdAt).toISOString(),
   });
-  memoryCache.plan = plan;
 }
 
 export async function getCurrentPlan(): Promise<WorkoutPlan | null> {
@@ -250,7 +280,7 @@ export async function getCurrentPlan(): Promise<WorkoutPlan | null> {
 
   const CACHE_KEY = 'ghostfit_active_plan';
   const cached = localStorage.getItem(CACHE_KEY);
-  
+
   const userId = await uid();
   if (!userId) return cached ? JSON.parse(cached) : null;
 
@@ -264,17 +294,19 @@ export async function getCurrentPlan(): Promise<WorkoutPlan | null> {
     .single();
 
   if (error || !data) return cached ? JSON.parse(cached) : null;
-  
+
+  const { days: storedDays, meta } = unwrapDays(data.days);
   const rawPlan: WorkoutPlan = {
     weekNumber: data.week_number,
-    days: Array.isArray(data.days) ? data.days as WorkoutDay[] : [],
+    days: storedDays,
     createdAt: new Date(data.created_at).getTime(),
+    meta,
   };
 
   // Backwards compatibility: backfill metricType
   const profile = await getProfile();
   const userEquipment = profile?.equipment ?? [];
-  const plan: WorkoutPlan = {
+  const normalized: WorkoutPlan = {
     ...rawPlan,
     days: rawPlan.days.map(day => ({
       ...day,
@@ -283,7 +315,11 @@ export async function getCurrentPlan(): Promise<WorkoutPlan | null> {
       )
     }))
   };
-  
+
+  // Pre-engine plans get warm-ups, stretches and rest prescriptions inferred
+  // on read, so nobody has to regenerate to stop guessing at recovery.
+  const plan = enrichPlan(normalized, userEquipment, meta?.sessionMinutes ?? 45);
+
   localStorage.setItem(CACHE_KEY, JSON.stringify(plan));
   memoryCache.plan = plan;
   return plan;

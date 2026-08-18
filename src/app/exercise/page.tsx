@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getCurrentPlan, getGhostForExercise, saveGhostSession, getWinCount, getAllSessions, getCachedExercise, cacheExercise, getStreak, getAllTimeBest, updateCachedVideoId, getProfile, awardSoulCoins } from '@/lib/db';
 import { Exercise, GhostSession, ExerciseInfo, calculateTier } from '@/lib/types';
+import { progressionCue } from '@/lib/training-science';
 import { useAppStore } from '@/store/appStore';
 import { Avatar } from '@/components/Avatar';
 import { SmartLogger } from '@/components/SmartLogger';
@@ -128,13 +129,16 @@ function ExerciseContent() {
   const [restSeconds, setRestSeconds] = useState(0);
   const restIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  function getRestDuration(goal: string): number {
+  /**
+   * Rest comes from the exercise's own prescription — a heavy compound needs
+   * two to three minutes to restore force output, an isolation set does not.
+   * The goal-level fallback only applies to plans that predate the engine.
+   */
+  function getRestDuration(exercise: Exercise | null, goal: string): number {
+    if (exercise?.restSeconds) return exercise.restSeconds;
     return ({
-      'Get Stronger':    120,
-      'Build Muscle':     90,
-      'Get Shredded':     45,
-      'Improve Fitness':  60,
-    } as Record<string, number>)[goal] ?? 60;
+      strength: 150, muscle: 105, shredded: 60, fitness: 75,
+    } as Record<string, number>)[(goal || '').toLowerCase()] ?? 90;
   }
 
   // Bug Fix 1: Guard against double-taps
@@ -328,7 +332,7 @@ function ExerciseContent() {
     const mt = exercise?.metricType;
     if (mt === 'cardio' || mt === 'duration') return;
 
-    const duration = getRestDuration(profile?.goal ?? 'Build Muscle');
+    const duration = getRestDuration(exercise, profile?.goal ?? 'muscle');
     setRestSeconds(duration);
     setIsResting(true);
 
@@ -708,6 +712,32 @@ function ExerciseContent() {
             )}
           </div>
         </div>
+
+        {/* Prescription — the numbers that make the set count for something */}
+        {(exercise.targetRir !== undefined || exercise.restSeconds || exercise.coachNote) && (
+          <div className="ex-prescription px-5 mb-4">
+            <div className="ex-prescription-chips">
+              {exercise.repMin && exercise.repMax && (
+                <span className="ex-chip">🎯 {exercise.repMin}–{exercise.repMax} reps</span>
+              )}
+              {exercise.targetRir !== undefined && (
+                <span className="ex-chip">
+                  {exercise.targetRir === 0 ? '💥 Last set to failure' : `🛑 Stop with ${exercise.targetRir} left`}
+                </span>
+              )}
+              {exercise.restSeconds ? (
+                <span className="ex-chip">
+                  ⏱ {exercise.restSeconds >= 60 ? `${Math.round(exercise.restSeconds / 6) / 10} min` : `${exercise.restSeconds}s`} rest
+                </span>
+              ) : null}
+              {exercise.tempo && <span className="ex-chip">🕒 Tempo {exercise.tempo}</span>}
+            </div>
+            {exercise.coachNote && <p className="ex-coach-note">💡 {exercise.coachNote}</p>}
+            {exercise.repMin && exercise.repMax && (
+              <p className="ex-progression">{progressionCue(exercise.repMin, exercise.repMax, exercise.metricType)}</p>
+            )}
+          </div>
+        )}
 
         {/* Instructions - added px-5 */}
         {instructions.length > 0 && (

@@ -1,5 +1,6 @@
 'use client';
 import BottomNav from '@/components/BottomNav';
+import { PageSkeleton } from '@/components/Skeleton';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -248,10 +249,10 @@ export default function NutritionPage() {
 
   if (!ready) {
     return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
-        <div className="ghost-loader" style={{ fontSize: 40 }}>🥗</div>
-        <p style={{ color: 'var(--text2)', fontSize: 13 }}>Setting the table...</p>
-      </div>
+      <>
+        <PageSkeleton cards={4} cardHeight={96} hero={132} />
+        <BottomNav active="fuel" />
+      </>
     );
   }
 
