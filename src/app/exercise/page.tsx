@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { getCurrentPlan, getExerciseHistory, saveGhostSession, getWinCount, getAllSessions, getCachedExercise, cacheExercise, getStreak, getAllTimeBest, updateCachedVideoId, getProfile, awardSoulCoins, getDaysSinceLastWorkout } from '@/lib/db';
+import { getCurrentPlan, getGhostHistory, saveGhostSession, getWinCount, getAllSessions, getCachedExercise, cacheExercise, getStreak, getAllTimeBest, updateCachedVideoId, getProfile, awardSoulCoins, getDaysSinceLastWorkout } from '@/lib/db';
+import { identifyExercise, PATTERN_LABELS, type ExerciseIdentity } from '@/lib/exercise-identity';
 import { Exercise, GhostSession, ExerciseInfo, calculateTier } from '@/lib/types';
 import { progressionCue } from '@/lib/training-science';
 import {
@@ -85,6 +86,8 @@ function ExerciseContent() {
 
   const [exercise, setExercise] = useState<Exercise | null>(null);
   const [ghost, setGhost] = useState<GhostRead | null>(null);
+  /** Resolved lift identity — stamped onto the session so history survives rotations. */
+  const [identity, setIdentity] = useState<ExerciseIdentity | null>(null);
   /** Weight used last time on this lift — prefilled so logging is one tap. */
   const [lastWeight, setLastWeight] = useState(0);
   const [tier, setTier] = useState(1);
@@ -166,18 +169,23 @@ function ExerciseContent() {
       const ex = td.exercises[idx];
       setExercise(ex);
 
-      // The ghost reads your last few sessions on this exact lift, plus where
-      // the program is, and sets a target it thinks you can actually take today.
+      // The ghost reads this lift's own history for the number, and the wider
+      // movement pattern for momentum — so rotating Barbell Bench to Dumbbell
+      // Bench at the start of a block does not wipe the slate.
+      const identity = identifyExercise(ex);
       const [history, daysSinceAnyWorkout] = await Promise.all([
-        getExerciseHistory(ex.name, 6),
+        getGhostHistory({ ...ex, movementPattern: identity?.pattern }, 6),
         getDaysSinceLastWorkout(),
       ]);
+      setIdentity(identity);
       setGhost(readGhost(ex, {
-        history,
+        history: history.same,
+        relatedHistory: history.related,
+        patternLabel: identity ? PATTERN_LABELS[identity.pattern] : undefined,
         phase: plan.meta?.phase,
         daysSinceAnyWorkout,
       }));
-      setLastWeight(Math.round(history[0]?.avgWeight ?? 0));
+      setLastWeight(Math.round(history.same[0]?.avgWeight ?? 0));
 
       const profile = await getProfile();
       if (profile) setUnlockedCosmetics(profile.unlockedCosmetics || []);
@@ -399,6 +407,8 @@ function ExerciseContent() {
       totalReps: reps, avgWeight: avgWeight,
       totalDuration: duration || seconds, setsCompleted: sets,
       result: res === 'first' ? 'win' : res, characterTier: tier,
+      libraryId: exercise.libraryId ?? identity?.libraryId,
+      movementPattern: exercise.movementPattern ?? identity?.pattern,
     };
     await saveGhostSession(session);
 
@@ -442,7 +452,7 @@ function ExerciseContent() {
     }
 
     setResult(res);
-  }, [exercise, ghost, seconds, soundEnabled, tier, weights]);
+  }, [exercise, ghost, identity, seconds, soundEnabled, tier, weights]);
 
   async function handleGiveUp() {
     if (!exercise) return;
@@ -450,6 +460,8 @@ function ExerciseContent() {
       id: crypto.randomUUID(), exerciseName: exercise.name, date: Date.now(),
       totalReps, avgWeight: weights.length > 0 ? weights.reduce((a, b) => a + b, 0) / weights.length : 0,
       totalDuration: seconds, setsCompleted, result: 'loss', characterTier: tier,
+      libraryId: exercise.libraryId ?? identity?.libraryId,
+      movementPattern: exercise.movementPattern ?? identity?.pattern,
     };
     await saveGhostSession(session);
     
@@ -750,11 +762,15 @@ function ExerciseContent() {
           <div className="ghost-brief px-5 mb-4" style={{ borderColor: `${mood.color}44` }}>
             <div className="ghost-brief-head">
               <span style={{ color: mood.color }}>{mood.emoji} {ghost.headline}</span>
-              {!ghost.isFirstMeeting && (
+              {ghost.carriedFrom ? (
+                <span className="ghost-brief-meta carried">
+                  🔗 carried over from your {ghost.carriedFrom}
+                </span>
+              ) : !ghost.isFirstMeeting ? (
                 <span className="ghost-brief-meta">
                   from your last {ghost.sampleSize} {ghost.sampleSize === 1 ? 'session' : 'sessions'}
                 </span>
-              )}
+              ) : null}
             </div>
             <p className="ghost-brief-reason">{ghost.reason}</p>
             <div className="ghost-brief-numbers">

@@ -56,11 +56,27 @@ export interface GhostRead {
   isFirstMeeting: boolean;
   /** Sessions the read is based on. */
   sampleSize: number;
+  /**
+   * Set when momentum was inherited from other variations of the same pattern
+   * — the label of that pattern, so the ghost can say where it came from.
+   */
+  carriedFrom?: string;
 }
 
 export interface GhostContext {
-  /** Newest first. Only sessions for this exercise. */
+  /** Newest first. Only sessions for this exact lift. */
   history: GhostSession[];
+  /**
+   * Newest first. Sessions on other variations of the same movement pattern.
+   *
+   * Loads are not comparable across variations — 30 kg dumbbell bench is not
+   * 30 kg barbell bench — so these never set the target number. What they do
+   * carry is momentum: whether you have been winning or struggling at this
+   * *movement*, which is a fact about you and survives a variation swap.
+   */
+  relatedHistory?: GhostSession[];
+  /** Human label for the shared pattern, e.g. "horizontal pressing". */
+  patternLabel?: string;
   /** Where the program is — a deload ghost does not pick fights. */
   phase?: TrainingPhase;
   /** Days since the user trained at all. */
@@ -142,14 +158,43 @@ export function shortUnit(unit: ScoreUnit): string {
 
 // ─── Reading your form ───────────────────────────────────────────────────────
 
-interface Form {
-  baseline: number;
-  best: number;
+interface Momentum {
   lossStreak: number;
   winStreak: number;
   recentWins: number;
+}
+
+interface Form extends Momentum {
+  baseline: number;
+  best: number;
   trend: 'up' | 'flat' | 'down';
   daysSinceThisExercise: number | null;
+}
+
+/**
+ * Momentum from results alone.
+ *
+ * Deliberately score-free, which is what makes it portable: a win is a win
+ * relative to whatever target that session faced, so wins on a dumbbell press
+ * and wins on a barbell press stack into one streak even though their loads
+ * are not comparable.
+ */
+function readMomentum(sessions: GhostSession[]): Momentum {
+  const recent = sessions.slice(0, 6);
+
+  let lossStreak = 0;
+  for (const s of recent) {
+    if (s.result === 'loss' || s.result === 'incomplete') lossStreak++;
+    else break;
+  }
+  let winStreak = 0;
+  for (const s of recent) {
+    if (s.result === 'win') winStreak++;
+    else break;
+  }
+  const recentWins = recent.slice(0, 3).filter(s => s.result === 'win').length;
+
+  return { lossStreak, winStreak, recentWins };
 }
 
 function readForm(history: GhostSession[], unit: ScoreUnit): Form {
@@ -168,18 +213,6 @@ function readForm(history: GhostSession[], unit: ScoreUnit): Form {
   });
   const baseline = used > 0 ? Math.round(weighted / used) : 0;
 
-  let lossStreak = 0;
-  for (const s of recent) {
-    if (s.result === 'loss' || s.result === 'incomplete') lossStreak++;
-    else break;
-  }
-  let winStreak = 0;
-  for (const s of recent) {
-    if (s.result === 'win') winStreak++;
-    else break;
-  }
-  const recentWins = recent.slice(0, 3).filter(s => s.result === 'win').length;
-
   let trend: Form['trend'] = 'flat';
   if (scores.length >= 3) {
     const newer = (scores[0] + scores[1]) / 2;
@@ -192,7 +225,7 @@ function readForm(history: GhostSession[], unit: ScoreUnit): Form {
     ? Math.floor((Date.now() - history[0].date) / 86400000)
     : null;
 
-  return { baseline, best, lossStreak, winStreak, recentWins, trend, daysSinceThisExercise };
+  return { baseline, best, trend, daysSinceThisExercise, ...readMomentum(recent) };
 }
 
 // ─── The read ────────────────────────────────────────────────────────────────
@@ -299,28 +332,75 @@ function decideMood(form: Form, phase: TrainingPhase | undefined, unit: ScoreUni
 export function readGhost(exercise: Exercise, context: GhostContext): GhostRead {
   const unit = unitFor(exercise);
   const usable = (context.history ?? []).filter(s => sessionScore(s, unit) > 0);
+  const related = context.relatedHistory ?? [];
   const sets = Math.max(1, exercise.sets ?? 3);
+  const patternLabel = context.patternLabel;
 
   if (usable.length === 0) {
-    const target = prescribedScore(exercise, unit === 'load' ? 'reps' : unit);
+    // Never trained *this* variation, so the plan sets the number. But if you
+    // have been training the movement, the ghost arrives already knowing how
+    // it has been going and adjusts the prescription accordingly.
     const firstUnit: ScoreUnit = unit === 'load' ? 'reps' : unit;
+    const prescribed = prescribedScore(exercise, firstUnit);
+    const momentum = readMomentum(related);
+    const carries = related.length >= 2
+      && (momentum.winStreak >= 2 || momentum.lossStreak >= 2);
+
+    if (!carries) {
+      return {
+        target: prescribed,
+        stretchTarget: Math.round(prescribed * 1.15),
+        unit: firstUnit,
+        mood: 'first_meeting',
+        headline: 'First meeting',
+        reason: `No history on this one yet, so the plan sets the bar: ${formatScore(prescribed, firstUnit)}. Whatever you log today becomes the ghost you race next time — log it honestly.`,
+        perSetTarget: pace(prescribed, sets),
+        baseline: prescribed,
+        best: 0,
+        handicap: 1,
+        isFirstMeeting: true,
+        sampleSize: 0,
+      };
+    }
+
+    const carriedForm: Form = {
+      baseline: prescribed, best: 0, trend: 'flat', daysSinceThisExercise: null, ...momentum,
+    };
+    const carriedDecision = decideMood(carriedForm, context.phase, firstUnit);
+    const carriedTarget = Math.max(1, Math.round(prescribed * carriedDecision.handicap));
+    const movement = patternLabel ?? 'this movement';
+    const run = momentum.winStreak >= 2
+      ? `${momentum.winStreak} straight wins on ${movement}`
+      : `${momentum.lossStreak} tough sessions on ${movement}`;
+
     return {
-      target,
-      stretchTarget: Math.round(target * 1.15),
+      target: carriedTarget,
+      stretchTarget: Math.round(carriedTarget * 1.15),
       unit: firstUnit,
-      mood: 'first_meeting',
-      headline: 'First meeting',
-      reason: `No history on this one yet, so the plan sets the bar: ${formatScore(target, firstUnit)}. Whatever you log today becomes the ghost you race next time — log it honestly.`,
-      perSetTarget: pace(target, sets),
-      baseline: target,
+      mood: carriedDecision.mood,
+      headline: carriedDecision.headline,
+      reason: `New variation, same job — so the ghost brought your record with it. ${run}, and it set today's bar from the plan adjusted for that. ${carriedDecision.reason}`,
+      perSetTarget: pace(carriedTarget, sets),
+      baseline: prescribed,
       best: 0,
-      handicap: 1,
+      handicap: carriedDecision.handicap,
       isFirstMeeting: true,
-      sampleSize: 0,
+      sampleSize: related.length,
+      carriedFrom: movement,
     };
   }
 
   const form = readForm(usable, unit);
+
+  // One or two sessions cannot establish a streak. Sibling variations can, and
+  // a win is a win regardless of which variation earned it — so momentum is
+  // merged chronologically until this lift has a sample of its own.
+  const thin = usable.length < 3 && related.length > 0;
+  if (thin) {
+    const merged = [...usable, ...related].sort((a, b) => b.date - a.date);
+    Object.assign(form, readMomentum(merged));
+  }
+
   const decision = decideMood(form, context.phase, unit);
 
   const raw = form.baseline * decision.handicap;
@@ -337,13 +417,16 @@ export function readGhost(exercise: Exercise, context: GhostContext): GhostRead 
     unit,
     mood: decision.mood,
     headline: decision.headline,
-    reason: decision.reason,
+    reason: thin && patternLabel
+      ? `${decision.reason} Momentum counted from your ${patternLabel} as a whole — you have only logged this variation ${usable.length === 1 ? 'once' : `${usable.length} times`}.`
+      : decision.reason,
     perSetTarget: pace(target, sets),
     baseline: form.baseline,
     best: form.best,
     handicap: decision.handicap,
     isFirstMeeting: false,
     sampleSize: usable.length,
+    carriedFrom: thin ? patternLabel : undefined,
   };
 }
 

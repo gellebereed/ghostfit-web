@@ -9,6 +9,7 @@ import { supabase } from './supabase';
 import { WorkoutPlan, WorkoutDay, GhostSession, UserProfile, ExerciseInfo } from './types';
 import { sanitizeExercise } from '../services/openai';
 import { enrichPlan } from './plan-enrichment';
+import { identifyByName, isSameLift } from './exercise-identity';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -331,7 +332,7 @@ export async function saveGhostSession(session: GhostSession): Promise<void> {
   const userId = await uid();
   if (!userId) return;
 
-  await supabase.from('ghost_sessions').insert({
+  const core = {
     id: session.id,
     user_id: userId,
     exercise_name: session.exerciseName,
@@ -342,7 +343,21 @@ export async function saveGhostSession(session: GhostSession): Promise<void> {
     sets_completed: session.setsCompleted,
     result: session.result,
     character_tier: session.characterTier,
+  };
+
+  // Identity columns are additive (see training-engine.sql). On an install that
+  // has not run the migration the insert would fail wholesale, so a rejected
+  // write is retried without them — logging a workout must never be lost to a
+  // missing column.
+  const { error } = await supabase.from('ghost_sessions').insert({
+    ...core,
+    library_id: session.libraryId ?? null,
+    movement_pattern: session.movementPattern ?? null,
   });
+  if (error) {
+    console.warn('Session identity columns unavailable, saving without them:', error.message);
+    await supabase.from('ghost_sessions').insert(core);
+  }
   
   // Invalidate session-dependent caches
   const cacheKeys = [
@@ -377,41 +392,54 @@ export async function getAllSessions(): Promise<GhostSession[]> {
   return sessions;
 }
 
-export async function getGhostForExercise(exerciseName: string): Promise<GhostSession | null> {
-  const userId = await uid();
-  if (!userId) return null;
-
-  const { data, error } = await supabase
-    .from('ghost_sessions')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('exercise_name', exerciseName)
-    .order('date', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (error || !data) return null;
-  return rowToSession(data);
+export interface GhostHistory {
+  /** Sessions on this exact lift, newest first. Absolute numbers compare. */
+  same: GhostSession[];
+  /**
+   * Sessions on *other* variations of the same movement pattern, newest first.
+   * Loads are not comparable across variations, so these only ever contribute
+   * momentum — streaks and trend — never the baseline.
+   */
+  related: GhostSession[];
 }
 
 /**
- * Recent sessions for one exercise, newest first — the adaptive ghost reads
- * form from these rather than from the single most recent result.
+ * History for the adaptive ghost, keyed by lift identity rather than by name.
+ *
+ * Matching on the name alone meant a mesocycle rotation — Barbell Bench Press
+ * to Dumbbell Bench Press — read as a brand-new exercise and reset the ghost
+ * every four weeks. Identity is resolved from the stored library id where
+ * present and inferred from the name where it is not, so this works on history
+ * logged long before the columns existed.
  */
-export async function getExerciseHistory(exerciseName: string, limit = 6): Promise<GhostSession[]> {
-  const userId = await uid();
-  if (!userId) return [];
+export async function getGhostHistory(
+  exercise: { name: string; libraryId?: string; movementPattern?: string },
+  limit = 6,
+): Promise<GhostHistory> {
+  const sessions = await getAllSessions();
+  if (sessions.length === 0) return { same: [], related: [] };
 
-  const { data, error } = await supabase
-    .from('ghost_sessions')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('exercise_name', exerciseName)
-    .order('date', { ascending: false })
-    .limit(limit);
+  const target = {
+    libraryId: exercise.libraryId ?? identifyByName(exercise.name)?.libraryId,
+    name: exercise.name,
+  };
+  const pattern = exercise.movementPattern ?? identifyByName(exercise.name)?.pattern;
 
-  if (error || !data) return [];
-  return data.map(rowToSession);
+  const same: GhostSession[] = [];
+  const related: GhostSession[] = [];
+
+  // getAllSessions is already ordered newest-first and memory-cached.
+  for (const session of sessions) {
+    if (isSameLift({ libraryId: session.libraryId, name: session.exerciseName }, target)) {
+      if (same.length < limit) same.push(session);
+      continue;
+    }
+    if (!pattern || related.length >= limit) continue;
+    const sessionPattern = session.movementPattern ?? identifyByName(session.exerciseName)?.pattern;
+    if (sessionPattern === pattern) related.push(session);
+  }
+
+  return { same, related };
 }
 
 export async function getWinCount(): Promise<number> {
@@ -613,6 +641,8 @@ function rowToSession(row: any): GhostSession {
     setsCompleted: row.sets_completed ?? 0,
     result: row.result,
     characterTier: row.character_tier ?? 1,
+    libraryId: row.library_id ?? undefined,
+    movementPattern: row.movement_pattern ?? undefined,
   };
 }
 

@@ -68,6 +68,15 @@ export interface GhostSession {
   setsCompleted: number;
   result: 'win' | 'loss' | 'incomplete';
   characterTier: number;
+
+  /**
+   * Stable identity of the lift. The exercise *name* changes when a mesocycle
+   * rotates a variation; these do not, so the ghost keeps its history and its
+   * momentum across the rotation. Optional because sessions logged before the
+   * program engine have neither — those fall back to name resolution.
+   */
+  libraryId?: string;
+  movementPattern?: MovementPattern;
 }
 
 export interface UserProfile {

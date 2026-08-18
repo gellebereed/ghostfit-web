@@ -4698,3 +4698,6 @@ body { background: transparent; }
 .tune-foot { font-size: 10.5px; color: var(--text3); text-align: center; margin-top: 12px; line-height: 1.5; }
 .btn-primary:disabled { opacity: 0.4; cursor: default; }
 
+
+/* Momentum inherited from sibling variations of the same movement pattern. */
+.ghost-brief-meta.carried { color: var(--accent); font-weight: 700; }
