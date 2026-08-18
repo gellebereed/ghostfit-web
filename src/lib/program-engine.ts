@@ -38,6 +38,12 @@ export interface ProgramInput {
   phase?: TrainingPhase;
   /** Day of week the plan starts on (0 = Sunday). Defaults to today. */
   startDayIndex?: number;
+  /**
+   * Exact weekdays the user trains (0 = Sunday). When supplied this wins over
+   * `trainingDays` and over the split's default spacing — someone who can only
+   * train Tuesday, Thursday and Sunday needs those days, not "well spaced".
+   */
+  trainingDayIndices?: number[];
   /** Days off that triggered a rebuild — recorded in the plan meta. */
   reentryFromDaysOff?: number;
 }
@@ -311,7 +317,10 @@ export function buildProgram(input: ProgramInput): WorkoutPlan {
   const equipment = input.equipment?.length ? input.equipment : ['Bodyweight Only'];
   const experience = normalizeExperience(input.experience);
   const goalProfile = getGoalProfile(input.goal);
-  const trainingDays = Math.max(2, Math.min(6, Math.round(input.trainingDays ?? 3)));
+  const chosenDays = normalizeDayIndices(input.trainingDayIndices);
+  const trainingDays = chosenDays
+    ? chosenDays.length
+    : Math.max(2, Math.min(6, Math.round(input.trainingDays ?? 3)));
   const sessionMinutes = Math.max(20, Math.min(120, Math.round(input.sessionMinutes ?? 45)));
   const programWeek = Math.max(1, Math.round(input.programWeek ?? 1));
 
@@ -320,7 +329,11 @@ export function buildProgram(input: ProgramInput): WorkoutPlan {
   const split = selectSplit(trainingDays, experience, goalProfile.id);
 
   const startDay = input.startDayIndex ?? new Date().getDay();
-  const trainingOffsets = new Set(split.spacing);
+  // Offsets are measured from day 1 of the plan, which is always today.
+  const spacing = chosenDays
+    ? chosenDays.map(d => (d - startDay + 7) % 7).sort((a, b) => a - b)
+    : split.spacing;
+  const trainingOffsets = new Set(spacing);
 
   const picker: Picker = {
     used: new Set(),
@@ -350,13 +363,13 @@ export function buildProgram(input: ProgramInput): WorkoutPlan {
   const conditioningCount = cycle.isDeload ? 0 : goalProfile.conditioningSessions;
   const conditioningOffsets = new Set(
     // Spread them out: take from the end of the week backwards, every other day.
-    split.spacing.slice().reverse().filter((_, i) => i % 2 === 0).slice(0, conditioningCount),
+    spacing.slice().reverse().filter((_, i) => i % 2 === 0).slice(0, conditioningCount),
   );
   const conditioningReserve = Math.min(goalProfile.conditioningSeconds, 900) + 60;
 
   const sessions = new Map<number, SessionBuild & { template: SessionTemplate }>();
-  split.spacing.forEach((offset, i) => {
-    const template = SESSION_TEMPLATES[split.sequence[i]];
+  spacing.forEach((offset, i) => {
+    const template = SESSION_TEMPLATES[split.sequence[i % split.sequence.length]];
     const budget = conditioningOffsets.has(offset)
       ? Math.max(600, liftingBudget - conditioningReserve)
       : liftingBudget;
@@ -450,9 +463,18 @@ export function buildProgram(input: ProgramInput): WorkoutPlan {
     weeklySets,
     coachNotes: buildCoachNotes(cycle.note, split.rationale, goalProfile.summary, weeklySets, goalProfile.weeklySetTarget),
     reentryFromDaysOff: input.reentryFromDaysOff,
+    trainingDayIndices: chosenDays ?? undefined,
   };
 
   return { weekNumber: programWeek, days, createdAt: Date.now(), meta };
+}
+
+/** Deduplicate, clamp to 0-6, sort, and reject a selection we cannot program. */
+function normalizeDayIndices(days: number[] | undefined): number[] | null {
+  if (!days?.length) return null;
+  const clean = [...new Set(days.map(d => Math.floor(d)).filter(d => d >= 0 && d <= 6))].sort((a, b) => a - b);
+  // Below two days there is no split worth the name; above six there is no rest.
+  return clean.length >= 2 && clean.length <= 6 ? clean : null;
 }
 
 function sessionNote(template: SessionTemplate, phase: TrainingPhase): string {

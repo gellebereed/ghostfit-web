@@ -394,6 +394,26 @@ export async function getGhostForExercise(exerciseName: string): Promise<GhostSe
   return rowToSession(data);
 }
 
+/**
+ * Recent sessions for one exercise, newest first — the adaptive ghost reads
+ * form from these rather than from the single most recent result.
+ */
+export async function getExerciseHistory(exerciseName: string, limit = 6): Promise<GhostSession[]> {
+  const userId = await uid();
+  if (!userId) return [];
+
+  const { data, error } = await supabase
+    .from('ghost_sessions')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('exercise_name', exerciseName)
+    .order('date', { ascending: false })
+    .limit(limit);
+
+  if (error || !data) return [];
+  return data.map(rowToSession);
+}
+
 export async function getWinCount(): Promise<number> {
   if (memoryCache.winCount !== undefined) return memoryCache.winCount;
   
@@ -458,7 +478,7 @@ export async function getStreak(): Promise<number> {
   }
 
   // Active streak: calculate consecutive days backwards
-  let checkDate = hasWinToday ? new Date() : new Date(Date.now() - 86400000);
+  const checkDate = hasWinToday ? new Date() : new Date(Date.now() - 86400000);
   let streakCount = 0;
 
   while (true) {

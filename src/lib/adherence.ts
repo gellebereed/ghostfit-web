@@ -76,6 +76,7 @@ export async function applyComebackChoice(
     goal,
     experience: state.experience,
     trainingDays: state.trainingDays,
+    trainingDayIndices: state.trainingDayIndices ?? undefined,
     sessionMinutes: state.sessionMinutes,
     programWeek,
     phase,
@@ -128,6 +129,7 @@ export async function maybeAdvanceWeek(): Promise<WorkoutPlan | null> {
     goal: profile?.goal || 'fitness',
     experience: state.experience,
     trainingDays: state.trainingDays,
+    trainingDayIndices: state.trainingDayIndices ?? undefined,
     sessionMinutes: state.sessionMinutes,
     programWeek: nextWeek,
   });

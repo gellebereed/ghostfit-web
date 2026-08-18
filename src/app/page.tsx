@@ -517,12 +517,22 @@ export default function HomePage() {
         </Link>
       </div>
 
-      <div style={{ textAlign: 'center', marginBottom: 40 }}>
-        <Link href="/plan" style={{ fontSize: 12, color: 'var(--text2)', textDecoration: 'none', letterSpacing: 0.5 }}>
-          My Plan ✏️
-        </Link>
-      </div>
+      {/* Editing the plan is a primary action, not a footnote — and the
+          bottom spacer keeps it clear of the fixed nav bar. */}
+      <Link href="/plan" className="plan-cta">
+        <span className="plan-cta-icon">🗓️</span>
+        <span className="plan-cta-body">
+          <span className="plan-cta-title">Edit my plan</span>
+          <span className="plan-cta-sub">
+            {plan?.meta
+              ? `${plan.meta.splitName} · ${plan.meta.trainingDays} days × ${plan.meta.sessionMinutes} min`
+              : 'Days, session length, schedule and exercises'}
+          </span>
+        </span>
+        <span className="plan-cta-arrow">→</span>
+      </Link>
 
+      <div className="nav-spacer" />
       <BottomNav active="home" />
     </>
   );

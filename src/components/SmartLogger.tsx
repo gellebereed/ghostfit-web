@@ -18,7 +18,9 @@ interface SmartLoggerProps {
   restSeconds: number;
   onSkipRest: () => void;
   completedSets?: SetData[];       // per-set history for the tracker strip
-  ghostPerSet?: number | null;     // ghost's pace per set (reps or seconds)
+  ghostPerSet?: number | null;     // ghost's pace per set, in ghostUnit
+  /** What the ghost is scoring. 'load' = reps × weight, so a heavier set wins. */
+  ghostUnit?: 'reps' | 'seconds' | 'load';
   defaultWeight?: number;          // prefill: ghost avg weight / last session
   defaultReps?: number;            // prefill: plan target reps
 }
@@ -55,11 +57,12 @@ interface CardioLoggerProps {
 // SET TRACKER — every set is a round of the fight
 // ─────────────────────────────────────────────────────────────
 
-function SetTracker({ totalSets, currentSet, completedSets, ghostPerSet, metricType }: {
+function SetTracker({ totalSets, currentSet, completedSets, ghostPerSet, ghostUnit, metricType }: {
   totalSets: number;
   currentSet: number;
   completedSets: SetData[];
   ghostPerSet: number | null;
+  ghostUnit: 'reps' | 'seconds' | 'load';
   metricType: string;
 }) {
   if (metricType === 'cardio') return null;
@@ -68,8 +71,13 @@ function SetTracker({ totalSets, currentSet, completedSets, ghostPerSet, metricT
       {Array.from({ length: totalSets }, (_, i) => {
         const done = completedSets[i];
         const isCurrent = !done && i + 1 === currentSet;
-        const myScore = done ? (metricType === 'duration' ? (done.duration ?? 0) : (done.reps ?? 0)) : 0;
-        const beatPace = done && ghostPerSet !== null && myScore > ghostPerSet;
+        // Scored in the ghost's unit so the ⚡ only fires when the set genuinely
+        // beat the pace — a lighter set with more reps does not qualify.
+        const myScore = !done ? 0
+          : ghostUnit === 'seconds' ? (done.duration ?? 0)
+          : ghostUnit === 'load' ? (done.reps ?? 0) * Math.max(done.weight ?? 0, 1)
+          : (done.reps ?? 0);
+        const beatPace = !!done && ghostPerSet !== null && myScore >= ghostPerSet;
         return (
           <div key={i} className={`st-slot ${done ? (beatPace ? 'done beat' : 'done') : isCurrent ? 'current' : 'todo'}`}>
             <span className="st-round">R{i + 1}</span>
@@ -79,7 +87,7 @@ function SetTracker({ totalSets, currentSet, completedSets, ghostPerSet, metricT
                 metricType === 'duration' ? `${done.duration}s` :
                 `${done.reps}`
               ) : isCurrent ? (
-                ghostPerSet !== null ? `👻 ${metricType === 'duration' ? `${ghostPerSet}s` : ghostPerSet}` : 'GO'
+                ghostPerSet !== null ? `👻 ${ghostUnit === 'seconds' ? `${ghostPerSet}s` : ghostPerSet}` : 'GO'
               ) : (
                 '·'
               )}
@@ -95,7 +103,8 @@ function SetTracker({ totalSets, currentSet, completedSets, ghostPerSet, metricT
 export function SmartLogger({
   exercise, currentSet, onSetComplete,
   ghostDuration = 0, isResting, restSeconds, onSkipRest,
-  completedSets = [], ghostPerSet = null, defaultWeight = 0, defaultReps = 0,
+  completedSets = [], ghostPerSet = null, ghostUnit = 'reps',
+  defaultWeight = 0, defaultReps = 0,
 }: SmartLoggerProps) {
 
   // Read metricType directly from plan — AI already decided this
@@ -117,7 +126,10 @@ export function SmartLogger({
           {metricType === 'reps_only'        && 'Reps'}
         </span>
         {ghostPerSet !== null && metricType !== 'cardio' && (
-          <span className="sl-pace-chip">👻 pace: {metricType === 'duration' ? `${ghostPerSet}s` : ghostPerSet}/set</span>
+          <span className="sl-pace-chip">
+            👻 pace: {ghostUnit === 'seconds' ? `${ghostPerSet}s` : ghostPerSet}
+            {ghostUnit === 'load' ? ' vol' : ''}/set
+          </span>
         )}
       </div>
 
@@ -126,6 +138,7 @@ export function SmartLogger({
         currentSet={currentSet}
         completedSets={completedSets}
         ghostPerSet={ghostPerSet}
+        ghostUnit={ghostUnit}
         metricType={metricType}
       />
 

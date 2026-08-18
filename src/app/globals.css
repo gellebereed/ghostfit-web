@@ -4607,3 +4607,94 @@ body { background: transparent; }
 /* â”€â”€ Home: phase line â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .greeting-phase { font-size: 11.5px; color: var(--text3); line-height: 1.5; margin-top: 6px; max-width: 34ch; }
 
+
+/* â•â• Adaptive Ghost + plan tuning â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+
+/* â”€â”€ Arena: pace marker and mood strip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.hb-track { position: relative; }
+.hb-pace-marker {
+  position: absolute; top: -2px; bottom: -2px; width: 2px;
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+  transform: translateX(-1px);
+  transition: left 0.35s ease;
+  pointer-events: none;
+}
+
+.ghost-mood {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 14px 0;
+}
+.ghost-mood-tag {
+  flex-shrink: 0;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.9px;
+  padding: 3px 8px; border-radius: 999px; border: 1px solid; white-space: nowrap;
+}
+.ghost-mood-line { font-size: 11px; color: var(--text2); line-height: 1.4; flex: 1; min-width: 0; }
+
+/* â”€â”€ Exercise page: the ghost's brief â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.ghost-brief {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  padding: 14px !important;
+  margin-left: 20px; margin-right: 20px;
+}
+.ghost-brief-head {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  font-size: 13px; font-weight: 800;
+}
+.ghost-brief-meta { font-size: 10px; font-weight: 600; color: var(--text3); }
+.ghost-brief-reason { font-size: 12px; color: var(--text2); line-height: 1.55; margin-top: 7px; }
+.ghost-brief-numbers {
+  display: flex; gap: 18px; margin-top: 12px;
+  padding-top: 12px; border-top: 1px solid var(--border);
+}
+.ghost-brief-numbers > div { display: flex; flex-direction: column; gap: 2px; }
+.ghost-brief-label {
+  font-size: 9px; font-weight: 800; letter-spacing: 0.8px;
+  text-transform: uppercase; color: var(--text3);
+}
+.ghost-brief-numbers strong { font-size: 14px; font-weight: 800; }
+.ghost-brief-foot { font-size: 10px; color: var(--text3); line-height: 1.45; margin-top: 10px; }
+
+/* â”€â”€ Home: plan call to action + nav clearance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.plan-cta {
+  display: flex; align-items: center; gap: 14px;
+  margin: 4px 20px 0; padding: 16px;
+  border: 1px solid var(--border); border-radius: var(--r);
+  background: var(--surface); color: var(--text);
+  text-decoration: none; transition: var(--t);
+}
+.plan-cta:hover { border-color: var(--accent); background: var(--surface2); }
+.plan-cta:active { transform: scale(0.99); }
+.plan-cta-icon { font-size: 22px; flex-shrink: 0; }
+.plan-cta-body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.plan-cta-title { font-size: 14px; font-weight: 800; }
+.plan-cta-sub { font-size: 11px; color: var(--text2); line-height: 1.4; }
+.plan-cta-arrow { color: var(--accent); font-size: 18px; flex-shrink: 0; }
+
+/* The fixed nav is ~68px plus the home-indicator inset. Reserve it explicitly
+   so the last card on any page is never tucked underneath. */
+.nav-spacer { height: calc(96px + env(safe-area-inset-bottom)); }
+
+/* â”€â”€ Plan: tune sheet â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.bottom-sheet.tune-sheet { max-height: 88vh; overflow-y: auto; }
+
+.tune-day {
+  flex: 1; min-width: 40px; padding: 12px 4px; border-radius: 12px;
+  border: 1px solid var(--border); background: var(--surface2); color: var(--text3);
+  font-family: inherit; font-size: 11px; font-weight: 800; cursor: pointer;
+  transition: var(--t); letter-spacing: 0.3px;
+}
+.tune-day.on {
+  border-color: var(--accent); color: #000; background: var(--accent);
+}
+.tune-time {
+  flex: 1; min-width: 130px; padding: 12px; border-radius: 12px;
+  border: 1px solid var(--border); background: var(--surface2); color: var(--text);
+  font-family: inherit; font-size: 14px; font-weight: 700;
+}
+.tune-foot { font-size: 10.5px; color: var(--text3); text-align: center; margin-top: 12px; line-height: 1.5; }
+.btn-primary:disabled { opacity: 0.4; cursor: default; }
+

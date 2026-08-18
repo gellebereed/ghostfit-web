@@ -1,9 +1,13 @@
 'use client';
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { getCurrentPlan, getGhostForExercise, saveGhostSession, getWinCount, getAllSessions, getCachedExercise, cacheExercise, getStreak, getAllTimeBest, updateCachedVideoId, getProfile, awardSoulCoins } from '@/lib/db';
+import { getCurrentPlan, getExerciseHistory, saveGhostSession, getWinCount, getAllSessions, getCachedExercise, cacheExercise, getStreak, getAllTimeBest, updateCachedVideoId, getProfile, awardSoulCoins, getDaysSinceLastWorkout } from '@/lib/db';
 import { Exercise, GhostSession, ExerciseInfo, calculateTier } from '@/lib/types';
 import { progressionCue } from '@/lib/training-science';
+import {
+  formatScore, formatScoreCompact, liveScore, readGhost, readPace, shortUnit, verdictLine,
+  type GhostMood, type GhostRead,
+} from '@/lib/ghost-engine';
 import { useAppStore } from '@/store/appStore';
 import { Avatar } from '@/components/Avatar';
 import { SmartLogger } from '@/components/SmartLogger';
@@ -18,19 +22,15 @@ interface SetEntry {
   duration?: number;
 }
 
-interface InitiationGhost {
-  totalReps: number;
-  avgWeight: number;
-  totalDuration: number;
-  isInitiation: true;
-}
-
-type GhostOpponent = GhostSession | InitiationGhost;
-type Benchmark = { reps: number; weight: number; duration: number };
-
-function isInitiationGhost(ghost: GhostOpponent | null): ghost is InitiationGhost {
-  return ghost !== null && 'isInitiation' in ghost;
-}
+/** How the ghost's current mood reads in the arena. */
+const MOOD_META: Record<GhostMood, { label: string; color: string; emoji: string }> = {
+  first_meeting: { label: 'FIRST MEETING', color: '#5AC8FA', emoji: '👻' },
+  hunting:       { label: 'HUNTING',       color: '#FF4444', emoji: '🔥' },
+  pressuring:    { label: 'PRESSURING',    color: '#FF8A3D', emoji: '⚡' },
+  measured:      { label: 'MATCHING YOU',  color: '#FFD700', emoji: '👁️' },
+  waiting:       { label: 'WAITING',       color: '#7ED957', emoji: '🫱' },
+  protective:    { label: 'STANDING DOWN', color: '#5AC8FA', emoji: '🛡️' },
+};
 
 function ComboAnnouncer({ combo }: { combo: number | null }) {
   if (!combo || combo < 2) return null;
@@ -41,21 +41,6 @@ function ComboAnnouncer({ combo }: { combo: number | null }) {
       {text}
     </div>
   );
-}
-
-function getInitiationBenchmark(
-  exerciseName: string,
-  exerciseType: 'strength' | 'cardio',
-  goal: string
-): { reps: number; weight: number; duration: number } {
-  const benchmarks: Record<string, Record<'strength' | 'cardio', Benchmark>> = {
-    'Get Shredded': { strength: { reps: 12, weight: 15, duration: 0 }, cardio: { reps: 0, weight: 0, duration: 20 * 60 } },
-    'Build Muscle': { strength: { reps: 10, weight: 20, duration: 0 }, cardio: { reps: 0, weight: 0, duration: 15 * 60 } },
-    'Get Stronger': { strength: { reps: 6, weight: 30, duration: 0 }, cardio: { reps: 0, weight: 0, duration: 10 * 60 } },
-    'Improve Fitness': { strength: { reps: 15, weight: 10, duration: 0 }, cardio: { reps: 0, weight: 0, duration: 25 * 60 } }
-  };
-  const base = benchmarks[goal]?.[exerciseType] ?? benchmarks['Get Shredded'][exerciseType];
-  return { reps: base.reps * 3, weight: base.weight, duration: base.duration };
 }
 
 function YouTubeEmbed({ videoId }: { videoId: string }) {
@@ -99,7 +84,9 @@ function ExerciseContent() {
   const idx = parseInt(params.get('idx') || '0');
 
   const [exercise, setExercise] = useState<Exercise | null>(null);
-  const [ghost, setGhost] = useState<GhostOpponent | null>(null);
+  const [ghost, setGhost] = useState<GhostRead | null>(null);
+  /** Weight used last time on this lift — prefilled so logging is one tap. */
+  const [lastWeight, setLastWeight] = useState(0);
   const [tier, setTier] = useState(1);
 
   // Strength state
@@ -119,6 +106,7 @@ function ExerciseContent() {
   // UI state
   const [showGiveUp, setShowGiveUp] = useState(false);
   const [result, setResult] = useState<'win' | 'loss' | 'first' | null>(null);
+  const [verdict, setVerdict] = useState<string | null>(null);
   const [prNew, setPrNew] = useState(false);
   const [arenaShake, setArenaShake] = useState(false);
   const [flash, setFlash] = useState(false);
@@ -178,20 +166,19 @@ function ExerciseContent() {
       const ex = td.exercises[idx];
       setExercise(ex);
 
-      let g: GhostOpponent | null = await getGhostForExercise(ex.name);
-      if (!g) {
-        const profile = await getProfile();
-        const goal = profile?.goal || 'Get Shredded';
-        const isCardioOrDuration = ex.type === 'cardio' || ex.metricType === 'duration';
-        const benchmark = getInitiationBenchmark(ex.name, isCardioOrDuration ? 'cardio' : 'strength', goal);
-        g = {
-          totalReps: benchmark.reps,
-          avgWeight: benchmark.weight,
-          totalDuration: benchmark.duration,
-          isInitiation: true
-        };
-      }
-      setGhost(g);
+      // The ghost reads your last few sessions on this exact lift, plus where
+      // the program is, and sets a target it thinks you can actually take today.
+      const [history, daysSinceAnyWorkout] = await Promise.all([
+        getExerciseHistory(ex.name, 6),
+        getDaysSinceLastWorkout(),
+      ]);
+      setGhost(readGhost(ex, {
+        history,
+        phase: plan.meta?.phase,
+        daysSinceAnyWorkout,
+      }));
+      setLastWeight(Math.round(history[0]?.avgWeight ?? 0));
+
       const profile = await getProfile();
       if (profile) setUnlockedCosmetics(profile.unlockedCosmetics || []);
       const wc = await getWinCount();
@@ -291,7 +278,8 @@ function ExerciseContent() {
       setWeights(prev => [...prev, w]);
       setSetsCompleted(prev => prev + 1);
     }
-    setSetLog(prev => [...prev, { reps: r, weight: w, duration: d }]);
+    const nextLog = [...setLog, { reps: r, weight: w, duration: d }];
+    setSetLog(nextLog);
 
     playSetComplete();
     hapticSetComplete();
@@ -304,13 +292,17 @@ function ExerciseContent() {
     if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
     comboTimerRef.current = setTimeout(() => setShowCombo(null), 1200);
 
-    const score = exercise?.metricType === 'duration' ? (seconds + d) : (totalReps + r);
-    if (ghost && score > ghostTarget) {
-      setFlash(true);
-      setTimeout(() => setFlash(false), 500);
-    } else if (ghost && score === ghostTarget) {
-      setArenaShake(true);
-      setTimeout(() => setArenaShake(false), 300);
+    // Scored in the ghost's unit — for a weighted lift that means load, so a
+    // set of 8 at 40 kg outranks 20 at 5 kg instead of losing to it.
+    if (ghost) {
+      const score = liveScore(nextLog, ghost.unit);
+      if (score >= ghost.target) {
+        setFlash(true);
+        setTimeout(() => setFlash(false), 500);
+      } else if (score >= (ghost.perSetTarget[Math.min(nextLog.length - 1, ghost.perSetTarget.length - 1)] ?? 0)) {
+        setArenaShake(true);
+        setTimeout(() => setArenaShake(false), 300);
+      }
     }
   }
 
@@ -371,10 +363,26 @@ function ExerciseContent() {
   const finishExercise = useCallback(async (reps: number, sets: number, avgW: number, duration?: number) => {
     if (!exercise) return;
     const isCardio = exercise.type === 'cardio';
-    const ghostTarget = ghost ? (isCardio ? ghost.totalDuration : ghost.totalReps) : 0;
-    const myScore = isCardio ? (duration || seconds) : reps;
-    const won = ghost ? myScore > ghostTarget : false;
-    const res: 'win' | 'loss' | 'first' = ghost ? (won ? 'win' : 'loss') : 'first';
+    // `weights` has not yet re-rendered with the final set, so fold it in here.
+    // Using only the last set's weight would skew the load score on a ramp.
+    const allWeights = avgW > 0 ? [...weights, avgW] : weights;
+    const avgWeight = allWeights.length > 0
+      ? allWeights.reduce((a, b) => a + b, 0) / allWeights.length
+      : 0;
+
+    // Judge on the ghost's own unit, and let matching the target count as a
+    // win. Missing by nothing after a full honest session is not a defeat.
+    const unit = ghost?.unit ?? (isCardio ? 'seconds' : 'reps');
+    const myScore = unit === 'seconds'
+      ? (duration || seconds)
+      : unit === 'load'
+        ? Math.round(reps * Math.max(avgWeight, 1))
+        : reps;
+    const ghostTarget = ghost?.target ?? 0;
+    const won = ghost ? myScore >= ghostTarget : false;
+    const res: 'win' | 'loss' | 'first' = ghost?.isFirstMeeting && won
+      ? 'first'
+      : ghost ? (won ? 'win' : 'loss') : 'first';
 
     // Check personal record (before saving this session)
     const prevBest = await getAllTimeBest(exercise.name);
@@ -388,11 +396,13 @@ function ExerciseContent() {
 
     const session: GhostSession = {
       id: crypto.randomUUID(), exerciseName: exercise.name, date: Date.now(),
-      totalReps: reps, avgWeight: avgW || (weights.length > 0 ? weights.reduce((a, b) => a + b, 0) / weights.length : 0),
+      totalReps: reps, avgWeight: avgWeight,
       totalDuration: duration || seconds, setsCompleted: sets,
       result: res === 'first' ? 'win' : res, characterTier: tier,
     };
     await saveGhostSession(session);
+
+    if (ghost) setVerdict(verdictLine(ghost, myScore, isNewPR));
 
     const margin = ghostTarget > 0 ? ((myScore - ghostTarget) / ghostTarget) * 100 : 50;
     const earned = await awardSoulCoins(res === 'first' ? 'win' : res, margin);
@@ -458,10 +468,16 @@ function ExerciseContent() {
 
   if (!exercise) return <div className="loading"><div className="loader" /></div>;
   const isCardio = exercise.type === 'cardio' || exercise.metricType === 'duration';
-  const ghostTarget = ghost ? (isCardio ? ghost.totalDuration : ghost.totalReps) : 0;
-  const myScore = isCardio ? seconds : totalReps;
-  const ahead = ghost && myScore > ghostTarget;
-  const tied = ghost && myScore === ghostTarget;
+  const scoreUnit = ghost?.unit ?? (isCardio ? 'seconds' : 'reps');
+  const ghostTarget = ghost?.target ?? 0;
+  const myScore = liveScore(setLog, scoreUnit);
+  const ahead = ghost ? myScore >= ghostTarget : false;
+  const tied = false;
+  const mood = ghost ? MOOD_META[ghost.mood] : null;
+  const pace = ghost
+    ? readPace(ghost, myScore, setLog.length, Math.max(1, exercise.sets ?? 3))
+    : null;
+  const onPace = pace ? pace.ahead : true;
 
   const instrToShow = showAllInstr ? instructions : instructions.slice(0, 2);
 
@@ -505,10 +521,10 @@ function ExerciseContent() {
           {result !== 'loss' && <Celebration big={prNew} />}
           <div className="result-icon">{result === 'win' ? (prNew ? '🏆' : '🔥') : result === 'first' ? '👻' : '💀'}</div>
           {prNew && result === 'win' && <div className="pr-banner">NEW PERSONAL RECORD</div>}
-          <h2>{result === 'win' ? 'YOU BEAT YOUR GHOST' : result === 'first' ? 'GHOST DATA SAVED' : 'GHOST WINS TODAY'}</h2>
-          <p>{result === 'win' ? `+${myScore - ghostTarget} ${isCardio ? 'seconds' : 'reps'} more than last time!`
-            : result === 'first' ? 'Beat this next time you do this exercise.'
-            : "Tomorrow's you will remember this."}</p>
+          <h2>{result === 'win' ? 'YOU BEAT YOUR GHOST' : result === 'first' ? 'GHOST DATA SAVED' : 'GHOST HELD THIS ONE'}</h2>
+          <p>{verdict ?? (result === 'first'
+            ? 'Beat this next time you do this exercise.'
+            : "Tomorrow's you will remember this.")}</p>
           <button className="btn-primary" onClick={() => router.push('/workout')}>Continue →</button>
         </div>
       )}
@@ -559,21 +575,37 @@ function ExerciseContent() {
               <div className="hb-track">
                 <div className="hb-fill" style={{
                   width: `${ghost ? Math.min((myScore / Math.max(ghostTarget, myScore, 1)) * 100, 100) : (myScore > 0 ? 100 : 0)}%`,
-                  background: ahead || !ghost ? 'linear-gradient(90deg, #00FF87, #00CC6A)' : 'linear-gradient(90deg, #FFB800, #FF8C00)'
+                  background: onPace || !ghost ? 'linear-gradient(90deg, #00FF87, #00CC6A)' : 'linear-gradient(90deg, #FFB800, #FF8C00)'
                 }} />
+                {/* The ghost's pace marker — where it expects you to be right now */}
+                {ghost && pace && pace.expected > 0 && (
+                  <div className="hb-pace-marker" style={{
+                    left: `${Math.min(100, (pace.expected / Math.max(ghostTarget, myScore, 1)) * 100)}%`,
+                  }} />
+                )}
               </div>
             </div>
             <div className="hb-vs">VS</div>
             <div className="hb-col">
               <div className="hb-labels">
-                <span className="hb-ghost-info">{ghost ? (isCardio ? formatTime(ghostTarget) : `${ghostTarget} target`) : 'NO DATA'}</span>
-                <span className="hb-name ghost-name">{isInitiationGhost(ghost) ? 'DAY 1 TARGET' : (profile?.ghostName ?? 'GHOST')}</span>
+                <span className="hb-ghost-info">{ghost ? formatScore(ghostTarget, scoreUnit) : 'NO DATA'}</span>
+                <span className="hb-name ghost-name">{ghost?.isFirstMeeting ? 'DAY 1 TARGET' : (profile?.ghostName ?? 'GHOST')}</span>
               </div>
               <div className="hb-track">
                 <div className="hb-fill ghost-fill" style={{ width: ghost ? '100%' : '0%' }} />
               </div>
             </div>
           </div>
+
+          {/* Mood — what the ghost is doing today, and why */}
+          {ghost && mood && (
+            <div className="ghost-mood">
+              <span className="ghost-mood-tag" style={{ color: mood.color, borderColor: mood.color }}>
+                {mood.emoji} {mood.label}
+              </span>
+              <span className="ghost-mood-line">{pace?.line ?? ghost.headline}</span>
+            </div>
+          )}
 
           {/* Fighters Row */}
           <div className="fighters-row">
@@ -582,7 +614,7 @@ function ExerciseContent() {
               {headgear && <div className="absolute top-0 left-1/2 text-2xl z-20" style={{ transform: 'translate(-50%, -60%)' }}>{headgear}</div>}
               {badge && <div className="absolute bottom-0 right-0 text-sm z-20 bg-[#141414] rounded-full border border-gray-700 shadow-lg" style={{ padding: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, transform: 'translate(40%, 40%)' }}>{badge}</div>}
 
-              <div className="fc-score green">{isCardio ? formatTime(seconds) : totalReps}</div>
+              <div className="fc-score green">{formatScoreCompact(myScore, scoreUnit)}</div>
               <div className={`fc-card your-card ${glitchClass}`} style={{
                 background: 'linear-gradient(135deg, #0D1F0D, #141414)',
                 borderColor: auraColor,
@@ -600,23 +632,23 @@ function ExerciseContent() {
             <div className="fighter-center">
               {myScore === 0 && ghostTarget === 0 ? (
                 <div className="fc-dots"><div className="fc-dot" /><div className="fc-dot" /><div className="fc-dot" /></div>
-              ) : isInitiationGhost(ghost) && myScore === 0 ? (
+              ) : ghost?.isFirstMeeting && myScore === 0 ? (
                 <div className="fc-status-behind">
                   <span className="fc-status-text yellow" style={{fontSize: 9}}>SET YOUR BENCHMARK 🎯</span>
                 </div>
               ) : ahead ? (
                 <div className="fc-status-pulse">
-                  <span className="fc-status-text green">WINNING</span>
+                  <span className="fc-status-text green">{myScore >= (ghost?.stretchTarget ?? Infinity) ? 'DOMINANT' : 'WINNING'}</span>
                   <span className="fc-status-icon">⚡</span>
                 </div>
-              ) : tied ? (
+              ) : onPace ? (
                 <div className="fc-status-pulse">
-                  <span className="fc-status-text yellow">TIED</span>
+                  <span className="fc-status-text yellow">ON PACE</span>
                   <span className="fc-status-icon">🔥</span>
                 </div>
               ) : (
                 <div className="fc-status-behind">
-                  <span className="fc-behind-text">{ghostTarget - myScore} back</span>
+                  <span className="fc-behind-text">{formatScore(ghostTarget - myScore, scoreUnit)} back</span>
                   <span className="fc-status-icon dim">👻</span>
                 </div>
               )}
@@ -624,7 +656,7 @@ function ExerciseContent() {
 
             {/* GHOST FIGHTER */}
             <div className="fighter-card-wrap">
-              <div className="fc-score gray">{ghost ? (isCardio ? formatTime(ghost.totalDuration) : ghost.totalReps) : '—'}</div>
+              <div className="fc-score gray">{ghost ? formatScoreCompact(ghost.target, scoreUnit) : '—'}</div>
               <div className="fc-card ghost-card" style={{
                 background: 'linear-gradient(135deg, #1A1A2E, #141414)',
                 borderColor: 'rgba(255,255,255,0.15)',
@@ -633,7 +665,7 @@ function ExerciseContent() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}>
                 <Avatar type="ghost" size={72} animationState={ahead ? 'losing' : 'idle'} />
-                {ahead && !isInitiationGhost(ghost) && <div className="fc-defeated">💀</div>}
+                {ahead && !ghost?.isFirstMeeting && <div className="fc-defeated">💀</div>}
               </div>
               <div className="fc-label ghost-label">{profile?.ghostName ?? 'GHOST'}</div>
             </div>
@@ -713,6 +745,42 @@ function ExerciseContent() {
           </div>
         </div>
 
+        {/* Why the ghost set this number — never a mystery, never a guilt trip */}
+        {ghost && mood && (
+          <div className="ghost-brief px-5 mb-4" style={{ borderColor: `${mood.color}44` }}>
+            <div className="ghost-brief-head">
+              <span style={{ color: mood.color }}>{mood.emoji} {ghost.headline}</span>
+              {!ghost.isFirstMeeting && (
+                <span className="ghost-brief-meta">
+                  from your last {ghost.sampleSize} {ghost.sampleSize === 1 ? 'session' : 'sessions'}
+                </span>
+              )}
+            </div>
+            <p className="ghost-brief-reason">{ghost.reason}</p>
+            <div className="ghost-brief-numbers">
+              <div>
+                <span className="ghost-brief-label">To beat</span>
+                <strong style={{ color: mood.color }}>{formatScore(ghost.target, scoreUnit)}</strong>
+              </div>
+              {!ghost.isFirstMeeting && ghost.best > 0 && (
+                <div>
+                  <span className="ghost-brief-label">Your best</span>
+                  <strong>{formatScore(ghost.best, scoreUnit)}</strong>
+                </div>
+              )}
+              <div>
+                <span className="ghost-brief-label">Statement</span>
+                <strong>{formatScore(ghost.stretchTarget, scoreUnit)}</strong>
+              </div>
+            </div>
+            {scoreUnit === 'load' && (
+              <p className="ghost-brief-foot">
+                Scored on {shortUnit(scoreUnit)} — reps × weight. Dropping the weight to add reps will not beat it.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Prescription — the numbers that make the set count for something */}
         {(exercise.targetRir !== undefined || exercise.restSeconds || exercise.coachNote) && (
           <div className="ex-prescription px-5 mb-4">
@@ -762,19 +830,21 @@ function ExerciseContent() {
             exercise={exercise}
             currentSet={currentSet}
             onSetComplete={handleSetComplete}
-            ghostDuration={ghost?.totalDuration ?? 0}
+            ghostDuration={scoreUnit === 'seconds' ? (ghost?.target ?? 0) : 0}
             isResting={isResting}
             restSeconds={restSeconds}
             onSkipRest={handleSkipRest}
             completedSets={setLog}
+            // The incremental target for the set in front of you, not a flat
+            // average — the ghost front-loads, the way real sets actually go.
             ghostPerSet={
               !ghost || exercise.metricType === 'cardio' ? null
-              : exercise.metricType === 'duration'
-                ? Math.ceil(ghost.totalDuration / Math.max(exercise.sets, 1))
-                : Math.ceil(ghost.totalReps / Math.max(exercise.sets, 1))
+              : Math.max(1, (ghost.perSetTarget[currentSet - 1] ?? ghost.target)
+                  - (ghost.perSetTarget[currentSet - 2] ?? 0))
             }
-            defaultWeight={Math.round(ghost?.avgWeight ?? 0)}
-            defaultReps={exercise.reps || 0}
+            ghostUnit={scoreUnit}
+            defaultWeight={lastWeight}
+            defaultReps={exercise.repMin ?? exercise.reps ?? 0}
           />
         </div>
 

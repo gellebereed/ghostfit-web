@@ -440,4 +440,6 @@ export interface PlanMeta {
   coachNotes: string[];
   /** Set when the plan was rebuilt by the layoff engine. */
   reentryFromDaysOff?: number;
+  /** Weekdays the user chose to train on (0 = Sunday), when they picked them. */
+  trainingDayIndices?: number[];
 }

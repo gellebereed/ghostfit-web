@@ -16,6 +16,8 @@ export interface GeneratePlanOptions {
   goal: string;
   experience?: string;
   trainingDays?: number;
+  /** Exact weekdays to train (0 = Sunday). Overrides trainingDays. */
+  trainingDayIndices?: number[] | null;
   sessionMinutes?: number;
   /** Start a brand-new mesocycle at week 1 (goal or equipment changed). */
   restartCycle?: boolean;
@@ -29,7 +31,10 @@ export interface GeneratePlanOptions {
 export async function generateAndSavePlan(options: GeneratePlanOptions): Promise<WorkoutPlan> {
   const state = getProgramState();
   const experience = normalizeExperience(options.experience ?? state.experience);
-  const trainingDays = options.trainingDays ?? state.trainingDays;
+  const trainingDayIndices = options.trainingDayIndices !== undefined
+    ? options.trainingDayIndices
+    : state.trainingDayIndices;
+  const trainingDays = trainingDayIndices?.length ?? options.trainingDays ?? state.trainingDays;
   const sessionMinutes = options.sessionMinutes ?? state.sessionMinutes;
 
   // Changing goal or equipment invalidates the progression — start the ramp
@@ -41,6 +46,7 @@ export async function generateAndSavePlan(options: GeneratePlanOptions): Promise
     goal: options.goal,
     experience,
     trainingDays,
+    trainingDayIndices: trainingDayIndices ?? undefined,
     sessionMinutes,
     programWeek,
     phase: options.phase ?? state.phaseOverride ?? undefined,
@@ -51,11 +57,12 @@ export async function generateAndSavePlan(options: GeneratePlanOptions): Promise
 
   if (options.restartCycle) {
     resetProgramClock(options.phase ?? null);
-    saveProgramState({ experience, trainingDays, sessionMinutes });
+    saveProgramState({ experience, trainingDays, trainingDayIndices, sessionMinutes });
   } else {
     saveProgramState({
       experience,
       trainingDays,
+      trainingDayIndices,
       sessionMinutes,
       weekStartedAt: Date.now(),
     });

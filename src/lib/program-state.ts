@@ -18,6 +18,8 @@ const LEGACY_KEY = 'ghostfit_training_preferences';
 export interface ProgramState {
   experience: ExperienceLevel;
   trainingDays: number;
+  /** Exact weekdays the user trains (0 = Sunday). null = let the split decide. */
+  trainingDayIndices: number[] | null;
   sessionMinutes: number;
   /** Absolute week of the program — the periodization clock. */
   programWeek: number;
@@ -34,6 +36,7 @@ export interface ProgramState {
 export const DEFAULT_PROGRAM_STATE: ProgramState = {
   experience: 'beginner',
   trainingDays: 3,
+  trainingDayIndices: null,
   sessionMinutes: 45,
   programWeek: 1,
   weekStartedAt: 0,
@@ -50,6 +53,7 @@ function coerce(raw: unknown): ProgramState {
   return {
     experience,
     trainingDays: clamp(Number(value.trainingDays) || DEFAULT_PROGRAM_STATE.trainingDays, 2, 6),
+    trainingDayIndices: normalizeDays(value.trainingDayIndices),
     sessionMinutes: clamp(Number(value.sessionMinutes) || DEFAULT_PROGRAM_STATE.sessionMinutes, 20, 120),
     programWeek: Math.max(1, Math.round(Number(value.programWeek) || 1)),
     weekStartedAt: Number(value.weekStartedAt) || 0,
@@ -57,6 +61,13 @@ function coerce(raw: unknown): ProgramState {
     lastLayoffHandledDays: Number(value.lastLayoffHandledDays) || 0,
     lastLayoffPromptAt: Number(value.lastLayoffPromptAt) || 0,
   };
+}
+
+function normalizeDays(days: unknown): number[] | null {
+  if (!Array.isArray(days)) return null;
+  const clean = [...new Set(days.map(Number).filter(d => Number.isInteger(d) && d >= 0 && d <= 6))]
+    .sort((a, b) => a - b);
+  return clean.length >= 2 && clean.length <= 6 ? clean : null;
 }
 
 function clamp(n: number, min: number, max: number): number {

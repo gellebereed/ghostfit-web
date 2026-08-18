@@ -1,10 +1,10 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getCurrentPlan, getProfile, savePlan } from '@/lib/db';
+import { getCurrentPlan, getProfile, saveProfile, savePlan } from '@/lib/db';
 import { generateAndSavePlan } from '@/lib/plan-actions';
 import { getProgramState, saveProgramState, type ProgramState } from '@/lib/program-state';
-import { AUDITED_MUSCLES, getGoalProfile, volumeVerdict } from '@/lib/training-science';
+import { AUDITED_MUSCLES, getGoalProfile, normalizeExperience, selectSplit, volumeVerdict } from '@/lib/training-science';
 import {
   MUSCLE_LABELS, PHASE_META,
   type CooldownStep, type Exercise, type ExperienceLevel, type MuscleGroup,
@@ -31,6 +31,15 @@ import { CSS } from '@dnd-kit/utilities';
 const dayNames = [
   'Sunday', 'Monday', 'Tuesday', 'Wednesday',
   'Thursday', 'Friday', 'Saturday'
+];
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const GOALS = [
+  { id: 'strength', label: 'Strength' },
+  { id: 'muscle', label: 'Muscle' },
+  { id: 'shredded', label: 'Shredded' },
+  { id: 'fitness', label: 'Fitness' },
 ];
 
 const STAGE_LABELS: Record<WarmupStep['stage'], string> = {
@@ -302,6 +311,10 @@ export default function PlanPage() {
   const [regenerating, setRegenerating] = useState(false);
   const [program, setProgram] = useState<ProgramState | null>(null);
   const [showTune, setShowTune] = useState(false);
+  // Tune-sheet drafts — nothing is committed until "Rebuild my week".
+  const [draftDays, setDraftDays] = useState<number[]>([]);
+  const [draftTime, setDraftTime] = useState('');
+  const [draftGoal, setDraftGoal] = useState('');
 
   // Upgrade: Add Exercise state
   const [showAddSheet, setShowAddSheet] = useState(false);
@@ -343,10 +356,22 @@ export default function PlanPage() {
     try {
       const p = await getCurrentPlan();
       setPlan(p);
-      setProgram(getProgramState());
+      const state = getProgramState();
+      setProgram(state);
+
+      // Seed the tune drafts from what is actually programmed right now, so
+      // opening the sheet shows the truth rather than a default.
+      setDraftDays(
+        state.trainingDayIndices
+        ?? p?.days.filter(d => !d.isRest).map(d => dayNames.indexOf(d.dayName)).filter(i => i >= 0)
+        ?? [],
+      );
+
       const profile = await getProfile();
       if (profile) {
         setGoal(profile.goal);
+        setDraftGoal(getGoalProfile(profile.goal).id);
+        setDraftTime(profile.commitmentTime ?? '');
         setEquipment(profile.equipment);
         if (profile.equipment.length > 0) setNewExEquipment(profile.equipment[0]);
         else setNewExEquipment('Bodyweight');
@@ -356,6 +381,44 @@ export default function PlanPage() {
     } finally {
       setReady(true);
     }
+  }
+
+  /** Commit every tune-sheet change in one rebuild. */
+  async function applyTune() {
+    if (!program || draftDays.length < 2) return;
+    setShowTune(false);
+    setRegenerating(true);
+    try {
+      const profile = await getProfile();
+      const goalChanged = profile ? getGoalProfile(profile.goal).id !== draftGoal : false;
+
+      if (profile) {
+        await saveProfile({
+          ...profile,
+          goal: draftGoal,
+          commitmentTime: draftTime || null,
+          ...(goalChanged ? { currentWeek: 1 } : {}),
+        });
+      }
+
+      const next = await generateAndSavePlan({
+        equipment,
+        goal: draftGoal,
+        experience: program.experience,
+        sessionMinutes: program.sessionMinutes,
+        trainingDayIndices: draftDays,
+        // A different goal means different prescriptions — the volume ramp
+        // restarts rather than resuming mid-climb on numbers you never ran.
+        restartCycle: goalChanged,
+      });
+      setPlan(next);
+      setGoal(draftGoal);
+      setProgram(getProgramState());
+    } catch (err) {
+      console.error('Tune failed:', err);
+    }
+    setRegenerating(false);
+    setEditing(false);
   }
 
   async function getAiSuggestions() {
@@ -507,6 +570,11 @@ export default function PlanPage() {
   const phase = meta ? PHASE_META[meta.phase] : null;
   const goalLabel = getGoalProfile(goal).label;
 
+  // Live preview so the day picker explains its own consequence before you commit.
+  const previewSplit = draftDays.length >= 2
+    ? selectSplit(draftDays.length, normalizeExperience(program?.experience), draftGoal).name
+    : '—';
+
   const available = COMMON_EXERCISES.filter(e => e.toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -581,22 +649,57 @@ export default function PlanPage() {
       {showTune && program && (
         <>
           <div className="bottom-sheet-backdrop" onClick={() => setShowTune(false)} />
-          <div className="bottom-sheet" style={{ zIndex: 300 }}>
+          <div className="bottom-sheet tune-sheet" style={{ zIndex: 300 }}>
             <div style={{ padding: 20 }}>
               <div style={{ width: 40, height: 4, background: 'var(--border)', borderRadius: 2, margin: '0 auto 20px' }} />
               <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Tune your training</h3>
               <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 20 }}>
-                Change these and the split changes with them — 3 days builds a different program than 5.
+                These are the inputs the program is built from. Change one and the whole week is
+                re-programmed around it.
               </p>
 
-              <TuneRow label="Days per week" hint="More days means a more specialised split.">
-                {[2, 3, 4, 5, 6].map(d => (
-                  <button key={d} className={`tune-opt ${program.trainingDays === d ? 'on' : ''}`}
-                    onClick={() => setProgram({ ...program, trainingDays: d })}>{d}</button>
+              <TuneRow label="Goal" hint="Drives rep ranges, rest length and how much cardio gets programmed.">
+                {GOALS.map(g => (
+                  <button key={g.id} className={`tune-opt wide ${draftGoal === g.id ? 'on' : ''}`}
+                    onClick={() => setDraftGoal(g.id)}>{g.label}</button>
                 ))}
               </TuneRow>
 
-              <TuneRow label="Session length" hint="Shorter sessions drop accessories, never the main lifts.">
+              <TuneRow
+                label="Which days you train"
+                hint={
+                  draftDays.length < 2
+                    ? '⚠️ Pick at least two days.'
+                    : `${draftDays.length} days a week → ${previewSplit}. Rest days land on everything you leave off.`
+                }
+              >
+                {WEEKDAYS.map((d, i) => (
+                  <button
+                    key={d}
+                    className={`tune-day ${draftDays.includes(i) ? 'on' : ''}`}
+                    aria-pressed={draftDays.includes(i)}
+                    onClick={() => setDraftDays(
+                      draftDays.includes(i) ? draftDays.filter(x => x !== i) : [...draftDays, i].sort((a, b) => a - b),
+                    )}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </TuneRow>
+
+              <TuneRow label="Start time" hint="The ghost holds you to this. It shows on your home screen and turns into a nudge when you are late.">
+                <input
+                  type="time"
+                  className="tune-time"
+                  value={draftTime}
+                  onChange={e => setDraftTime(e.target.value)}
+                />
+                {draftTime && (
+                  <button className="tune-opt" onClick={() => setDraftTime('')}>Clear</button>
+                )}
+              </TuneRow>
+
+              <TuneRow label="Session length" hint="Shorter sessions drop accessories first. The main lifts are never cut.">
                 {[30, 45, 60, 75].map(m => (
                   <button key={m} className={`tune-opt ${program.sessionMinutes === m ? 'on' : ''}`}
                     onClick={() => setProgram({ ...program, sessionMinutes: m })}>{m}m</button>
@@ -610,14 +713,17 @@ export default function PlanPage() {
                 ))}
               </TuneRow>
 
-              <button className="btn-primary" style={{ marginTop: 18 }}
-                onClick={() => regenerate({
-                  trainingDays: program.trainingDays,
-                  sessionMinutes: program.sessionMinutes,
-                  experience: program.experience,
-                })}>
+              <button
+                className="btn-primary"
+                style={{ marginTop: 18 }}
+                disabled={draftDays.length < 2}
+                onClick={applyTune}
+              >
                 Rebuild my week →
               </button>
+              <p className="tune-foot">
+                Your logged history and ghosts are kept. Only this week&apos;s programming changes.
+              </p>
             </div>
           </div>
         </>
