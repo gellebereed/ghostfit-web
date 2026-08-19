@@ -9,6 +9,7 @@ import { savePlan } from './db';
 import { buildProgram } from './program-engine';
 import { getProgramState, resetProgramClock, saveProgramState } from './program-state';
 import { normalizeExperience } from './training-science';
+import type { FocusAreaId, FocusFrequency } from './focus-library';
 import type { TrainingPhase, WorkoutPlan } from './types';
 
 export interface GeneratePlanOptions {
@@ -19,6 +20,9 @@ export interface GeneratePlanOptions {
   /** Exact weekdays to train (0 = Sunday). Overrides trainingDays. */
   trainingDayIndices?: number[] | null;
   sessionMinutes?: number;
+  /** Body part to specialize in. Pass null to clear it. */
+  focusArea?: FocusAreaId | null;
+  focusFrequency?: FocusFrequency;
   /** Start a brand-new mesocycle at week 1 (goal or equipment changed). */
   restartCycle?: boolean;
   phase?: TrainingPhase;
@@ -36,6 +40,8 @@ export async function generateAndSavePlan(options: GeneratePlanOptions): Promise
     : state.trainingDayIndices;
   const trainingDays = trainingDayIndices?.length ?? options.trainingDays ?? state.trainingDays;
   const sessionMinutes = options.sessionMinutes ?? state.sessionMinutes;
+  const focusArea = options.focusArea !== undefined ? options.focusArea : state.focusArea;
+  const focusFrequency = options.focusFrequency ?? state.focusFrequency;
 
   // Changing goal or equipment invalidates the progression — start the ramp
   // again rather than dropping the user into week 3 of a program they never ran.
@@ -49,6 +55,8 @@ export async function generateAndSavePlan(options: GeneratePlanOptions): Promise
     trainingDayIndices: trainingDayIndices ?? undefined,
     sessionMinutes,
     programWeek,
+    focusArea,
+    focusFrequency,
     phase: options.phase ?? state.phaseOverride ?? undefined,
     startDayIndex: new Date().getDay(),
   });
@@ -57,13 +65,15 @@ export async function generateAndSavePlan(options: GeneratePlanOptions): Promise
 
   if (options.restartCycle) {
     resetProgramClock(options.phase ?? null);
-    saveProgramState({ experience, trainingDays, trainingDayIndices, sessionMinutes });
+    saveProgramState({ experience, trainingDays, trainingDayIndices, sessionMinutes, focusArea, focusFrequency });
   } else {
     saveProgramState({
       experience,
       trainingDays,
       trainingDayIndices,
       sessionMinutes,
+      focusArea,
+      focusFrequency,
       weekStartedAt: Date.now(),
     });
   }

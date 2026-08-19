@@ -9,6 +9,7 @@
  * a project that has not run the migration yet still saves everything else.
  */
 import { supabase } from './supabase';
+import { FOCUS_AREAS, normalizeFocusFrequency, type FocusAreaId, type FocusFrequency } from './focus-library';
 import type { ExperienceLevel, TrainingPhase } from './types';
 
 const KEY = 'ghostfit_program_state';
@@ -25,6 +26,10 @@ export interface ProgramState {
   programWeek: number;
   /** Epoch ms the current week's plan was generated. */
   weekStartedAt: number;
+  /** Body part the user asked to specialize in. null = balanced program. */
+  focusArea: FocusAreaId | null;
+  /** How many sessions a week carry the focus block. */
+  focusFrequency: FocusFrequency;
   /** Set while the user is working through a post-layoff re-entry week. */
   phaseOverride: TrainingPhase | null;
   /** Days-off value of the last comeback prompt the user answered. */
@@ -38,6 +43,8 @@ export const DEFAULT_PROGRAM_STATE: ProgramState = {
   trainingDays: 3,
   trainingDayIndices: null,
   sessionMinutes: 45,
+  focusArea: null,
+  focusFrequency: 'standard',
   programWeek: 1,
   weekStartedAt: 0,
   phaseOverride: null,
@@ -55,6 +62,8 @@ function coerce(raw: unknown): ProgramState {
     trainingDays: clamp(Number(value.trainingDays) || DEFAULT_PROGRAM_STATE.trainingDays, 2, 6),
     trainingDayIndices: normalizeDays(value.trainingDayIndices),
     sessionMinutes: clamp(Number(value.sessionMinutes) || DEFAULT_PROGRAM_STATE.sessionMinutes, 20, 120),
+    focusArea: value.focusArea && value.focusArea in FOCUS_AREAS ? (value.focusArea as FocusAreaId) : null,
+    focusFrequency: normalizeFocusFrequency(value.focusFrequency),
     programWeek: Math.max(1, Math.round(Number(value.programWeek) || 1)),
     weekStartedAt: Number(value.weekStartedAt) || 0,
     phaseOverride: value.phaseOverride ?? null,

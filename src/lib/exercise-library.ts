@@ -258,6 +258,27 @@ const CORE: LibraryExercise[] = [
     cue: 'Knees to chest, lift the hips off the floor at the top.' }),
   def({ id: 'russian-twist', name: 'Russian Twist', pattern: 'core_flexion', primary: ['obliques'], secondary: ['core'], metricType: 'bodyweight_reps',
     cue: 'Chest tall, rotate from the ribs — not the arms.' }),
+
+  // Loadable flexion. The abs are skeletal muscle and grow the same way every
+  // other muscle does — by being asked to do more over time. Bodyweight
+  // crunches cap out; these can be loaded for years, which is the single
+  // biggest reason to prefer them.
+  def({ id: 'cable-crunch', name: 'Cable Crunch', pattern: 'core_flexion', primary: ['core'], secondary: ['obliques'], equipment: ['Cable Machine'], metricType: 'weight_reps',
+    cue: 'Kneel, rope by your ears. Curl the ribs to the hips — hips stay put, arms do nothing.' }),
+  def({ id: 'weighted-decline-crunch', name: 'Weighted Decline Crunch', pattern: 'core_flexion', primary: ['core'], secondary: ['hip_flexors'], equipment: ['Bench', 'Dumbbells'], metricType: 'weight_reps',
+    cue: 'Decline the bench if it adjusts. Dumbbell on the chest, round the spine up one vertebra at a time.' }),
+  def({ id: 'weighted-floor-crunch', name: 'Weighted Crunch', pattern: 'core_flexion', primary: ['core'], secondary: [], equipment: ['Dumbbells'], metricType: 'weight_reps', level: 1,
+    cue: 'Dumbbell held at the chest. Lift the shoulder blades clear of the floor, then lower slowly.' }),
+
+  // Bottom-up flexion. Posterior pelvic tilt biases the lower fibres, which
+  // the crunch family reaches least — which is why the pairing works.
+  def({ id: 'hanging-leg-raise', name: 'Hanging Leg Raise', pattern: 'core_flexion', primary: ['core', 'hip_flexors'], secondary: ['forearms'], equipment: ['Pull-up Bar'], metricType: 'bodyweight_reps', level: 3,
+    cue: 'Legs straight, toes to the bar if you can. No swinging — dead stop each rep.' }),
+  def({ id: 'captains-chair-leg-raise', name: 'Captain’s Chair Leg Raise', pattern: 'core_flexion', primary: ['core', 'hip_flexors'], secondary: [], equipment: ['Dip Station'], metricType: 'bodyweight_reps',
+    cue: 'Back flat to the pad. Roll the pelvis up at the top instead of stopping at 90°.' }),
+
+  def({ id: 'cable-woodchop', name: 'Cable Woodchop', pattern: 'core_anti_rotation', primary: ['obliques'], secondary: ['core', 'shoulders'], equipment: ['Cable Machine'], metricType: 'weight_reps', unilateral: true,
+    cue: 'Rotate from the trunk, arms stay long. Hips face forward the whole way.' }),
 ];
 
 // ─── Isolation: shoulders / arms ─────────────────────────────────────────────

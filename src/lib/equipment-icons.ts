@@ -19,11 +19,12 @@ export const EQUIPMENT_ICONS: Record<string, string> = {
   'Medicine Ball': 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 4v16M4 12h16',
   'Bodyweight Only': 'M12 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM12 8v5m-3 0h6M9 13v5m6-5v5M9 18l-1 2m8-2 1 2',
   'Spin Bike': 'M5 17a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 17a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM5 14h14M12 7l-4 7M12 7h3',
+  'Dip Station': 'M5 5v14M19 5v14M5 9h14M8 9v5m8-5v5M3 19h4m10 0h4',
 };
 
 export const ALL_EQUIPMENT = [
   'Dumbbells', 'Barbell', 'Pull-up Bar', 'Bench', 'Resistance Bands',
   'Kettlebell', 'Cable Machine', 'Treadmill', 'Rowing Machine', 'Leg Press',
   'Smith Machine', 'EZ Curl Bar', 'Jump Rope', 'Yoga Mat', 'Medicine Ball',
-  'Bodyweight Only', 'Spin Bike'
+  'Dip Station', 'Bodyweight Only', 'Spin Bike'
 ];

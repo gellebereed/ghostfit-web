@@ -6,6 +6,10 @@ import { generateAndSavePlan } from '@/lib/plan-actions';
 import { getProgramState, saveProgramState, type ProgramState } from '@/lib/program-state';
 import { AUDITED_MUSCLES, getGoalProfile, normalizeExperience, selectSplit, volumeVerdict } from '@/lib/training-science';
 import {
+  FOCUS_AREA_LIST, FOCUS_AREAS, FOCUS_FREQUENCY_META,
+  type FocusAreaId, type FocusFrequency,
+} from '@/lib/focus-library';
+import {
   MUSCLE_LABELS, PHASE_META,
   type CooldownStep, type Exercise, type ExperienceLevel, type MuscleGroup,
   type WarmupStep, type WorkoutDay, type WorkoutPlan,
@@ -123,6 +127,7 @@ function SortableExerciseRow({
   };
 
   const chips: string[] = [];
+  if (exercise.block === 'focus') chips.push('⭐ Focus block');
   if (exercise.restSeconds) chips.push(`⏱ ${formatSeconds(exercise.restSeconds)} rest`);
   if (exercise.targetRir !== undefined) {
     chips.push(exercise.targetRir === 0 ? '💥 To failure' : `🎯 ${exercise.targetRir} reps in reserve`);
@@ -315,6 +320,8 @@ export default function PlanPage() {
   const [draftDays, setDraftDays] = useState<number[]>([]);
   const [draftTime, setDraftTime] = useState('');
   const [draftGoal, setDraftGoal] = useState('');
+  const [draftFocus, setDraftFocus] = useState<FocusAreaId | null>(null);
+  const [draftFocusFreq, setDraftFocusFreq] = useState<FocusFrequency>('standard');
 
   // Upgrade: Add Exercise state
   const [showAddSheet, setShowAddSheet] = useState(false);
@@ -358,6 +365,8 @@ export default function PlanPage() {
       setPlan(p);
       const state = getProgramState();
       setProgram(state);
+      setDraftFocus(state.focusArea);
+      setDraftFocusFreq(state.focusFrequency);
 
       // Seed the tune drafts from what is actually programmed right now, so
       // opening the sheet shows the truth rather than a default.
@@ -407,6 +416,8 @@ export default function PlanPage() {
         experience: program.experience,
         sessionMinutes: program.sessionMinutes,
         trainingDayIndices: draftDays,
+        focusArea: draftFocus,
+        focusFrequency: draftFocusFreq,
         // A different goal means different prescriptions — the volume ramp
         // restarts rather than resuming mid-climb on numbers you never ran.
         restartCycle: goalChanged,
@@ -575,6 +586,8 @@ export default function PlanPage() {
     ? selectSplit(draftDays.length, normalizeExperience(program?.experience), draftGoal).name
     : '—';
 
+  const focusArea = draftFocus ? FOCUS_AREAS[draftFocus] : null;
+
   const available = COMMON_EXERCISES.filter(e => e.toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -713,6 +726,43 @@ export default function PlanPage() {
                 ))}
               </TuneRow>
 
+              <TuneRow
+                label="Focus area"
+                hint={
+                  focusArea
+                    ? focusArea.rationale
+                    : 'Optional. Adds dedicated work for one body part on top of the normal split — the rest of the program is unchanged.'
+                }
+              >
+                <button className={`tune-opt wide ${draftFocus === null ? 'on' : ''}`}
+                  onClick={() => setDraftFocus(null)}>None</button>
+                {FOCUS_AREA_LIST.map(area => (
+                  <button
+                    key={area.id}
+                    className={`tune-opt wide ${draftFocus === area.id ? 'on' : ''}`}
+                    onClick={() => setDraftFocus(area.id)}
+                  >
+                    {area.emoji} {area.label}
+                  </button>
+                ))}
+              </TuneRow>
+
+              {focusArea && (
+                <TuneRow
+                  label="How often"
+                  hint={FOCUS_FREQUENCY_META[draftFocusFreq].blurb}
+                >
+                  {(Object.keys(FOCUS_FREQUENCY_META) as FocusFrequency[]).map(f => (
+                    <button key={f} className={`tune-opt wide ${draftFocusFreq === f ? 'on' : ''}`}
+                      onClick={() => setDraftFocusFreq(f)}>{FOCUS_FREQUENCY_META[f].label}</button>
+                  ))}
+                </TuneRow>
+              )}
+
+              {focusArea && (
+                <p className="tune-focus-reality">⚠️ {focusArea.reality}</p>
+              )}
+
               <button
                 className="btn-primary"
                 style={{ marginTop: 18 }}
@@ -784,6 +834,9 @@ export default function PlanPage() {
             <p className="plan-meta-sub">
               {goalLabel}
               {meta ? ` · ${meta.trainingDays} days × ${meta.sessionMinutes} min` : ''}
+              {meta?.focus && meta.focus.sessions > 0
+                ? ` · ⭐ ${meta.focus.label} ×${meta.focus.sessions}`
+                : ''}
             </p>
           </div>
           {phase && (

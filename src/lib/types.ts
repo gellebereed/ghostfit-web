@@ -383,7 +383,8 @@ export type ExerciseBlock =
   | 'accessory'    // isolation / smaller compound
   | 'core'
   | 'conditioning'
-  | 'finisher';
+  | 'finisher'
+  | 'focus';       // user-chosen specialization block
 
 /** RAMP protocol stages — Raise, Activate, Mobilise, Potentiate. */
 export type WarmupStage = 'raise' | 'mobilise' | 'activate' | 'potentiate';
@@ -451,4 +452,6 @@ export interface PlanMeta {
   reentryFromDaysOff?: number;
   /** Weekdays the user chose to train on (0 = Sunday), when they picked them. */
   trainingDayIndices?: number[];
+  /** Specialization the user asked for, and how many sessions carry it. */
+  focus?: { area: string; label: string; frequency: string; sessions: number };
 }

@@ -14,6 +14,10 @@
 import { buildCooldown, buildRestDayFlow, buildWarmup, totalCooldownSeconds, totalWarmupSeconds } from './mobility-library';
 import { availableExercises, displayEquipment, type LibraryExercise } from './exercise-library';
 import {
+  FOCUS_FREQUENCY_META, getFocusArea, normalizeFocusFrequency,
+  type FocusArea, type FocusAreaId, type FocusFrequency,
+} from './focus-library';
+import {
   AUDITED_MUSCLES, ENGINE_VERSION, exerciseSeconds, getExperienceProfile, getGoalProfile,
   minimumSets, normalizeExperience, periodize, progressionCue, roundTo, SESSION_TEMPLATES,
   selectSplit, clampRir,
@@ -46,6 +50,10 @@ export interface ProgramInput {
   trainingDayIndices?: number[];
   /** Days off that triggered a rebuild — recorded in the plan meta. */
   reentryFromDaysOff?: number;
+  /** Body part to specialize in, on top of the normal split. */
+  focusArea?: FocusAreaId | null;
+  /** How many sessions a week carry the focus block. */
+  focusFrequency?: FocusFrequency;
 }
 
 // ─── Exercise selection ──────────────────────────────────────────────────────
@@ -292,6 +300,89 @@ function conditioningExercise(
   };
 }
 
+// ─── Focus block ─────────────────────────────────────────────────────────────
+
+/**
+ * Build the specialization block for one session.
+ *
+ * Takes at most one exercise per role so the block covers complementary jobs
+ * instead of stacking near-identical movements, and skips anything the session
+ * already programmed — being handed a lat pulldown twice because you chose a
+ * back focus on pull day is exactly the kind of thing that erodes trust.
+ *
+ * `rotation` walks the role list on non-core roles so the third slot varies
+ * between sessions rather than being the same movement all week.
+ */
+function buildFocusBlock(
+  area: FocusArea,
+  equipment: string[],
+  experience: ExperienceLevel,
+  goalId: string,
+  ctx: Omit<PrescriptionContext, 'prescription'>,
+  alreadyUsed: Set<string>,
+  slotCount: number,
+  rotation: number,
+): { exercises: Exercise[]; seconds: number } {
+  const prescription = getGoalProfile(goalId).blocks.focus;
+  const pool = new Map(
+    availableExercises(equipment, experience).map(e => [e.id, e]),
+  );
+
+  const coreRoles = area.roles.filter(r => r.core);
+  const extraRoles = area.roles.filter(r => !r.core);
+
+  // With room for every core role, all of them are fixed and only the extras
+  // rotate — the staple pairing shows up on every focus session.
+  //
+  // With fewer slots than core roles (high frequency cuts the block to one
+  // exercise), the core roles themselves rotate instead. Otherwise the first
+  // role would win every session and the other half of the muscle would never
+  // get trained at all — which is the opposite of specializing in it.
+  const ordered = slotCount >= coreRoles.length
+    ? [...coreRoles, ...rotateFrom(extraRoles, rotation)]
+    : [...rotateFrom(coreRoles, rotation), ...extraRoles];
+
+  const exercises: Exercise[] = [];
+  let seconds = 0;
+
+  for (const role of ordered) {
+    if (exercises.length >= slotCount) break;
+    const lib = role.candidates
+      .map(id => pool.get(id))
+      .find((e): e is LibraryExercise => !!e && !alreadyUsed.has(e.id));
+    if (!lib) continue;
+
+    alreadyUsed.add(lib.id);
+    const slot: Slot = { pattern: lib.pattern, block: 'focus', priority: 3 };
+    const exercise = buildExercise(lib, slot, { ...ctx, prescription });
+    exercises.push({ ...exercise, coachNote: `${area.label} focus · ${role.label}. ${lib.cue}` });
+    seconds += exerciseCost(exercise);
+  }
+
+  return { exercises, seconds };
+}
+
+function rotateFrom<T>(items: T[], by: number): T[] {
+  if (items.length <= 1) return items;
+  const offset = ((by % items.length) + items.length) % items.length;
+  return [...items.slice(offset), ...items.slice(0, offset)];
+}
+
+/**
+ * Which training days carry the focus block, spread as evenly as the week
+ * allows. Consecutive focus days are the thing to avoid — the same small
+ * muscle worked two days running is where specialization stops paying.
+ */
+function selectFocusOffsets(spacing: number[], maxSessions: number): Set<number> {
+  if (spacing.length === 0 || maxSessions <= 0) return new Set();
+  if (maxSessions >= spacing.length) return new Set(spacing);
+
+  const step = spacing.length / maxSessions;
+  const chosen = new Set<number>();
+  for (let i = 0; i < maxSessions; i++) chosen.add(spacing[Math.floor(i * step)]);
+  return chosen;
+}
+
 // ─── Volume audit ────────────────────────────────────────────────────────────
 
 function auditWeeklySets(days: WorkoutDay[]): Partial<Record<MuscleGroup, number>> {
@@ -380,6 +471,46 @@ export function buildProgram(input: ProgramInput): WorkoutPlan {
     sessions.set(offset, { ...build, template });
   });
 
+  // Specialization goes on after the session is built, so it can never push
+  // out the programmed work — it is extra, by the user's explicit choice.
+  // A deload skips it: the point of a deload is less total work.
+  const focusArea = getFocusArea(input.focusArea);
+  const focusFrequency = normalizeFocusFrequency(input.focusFrequency);
+  const focusOffsets = focusArea && !cycle.isDeload
+    ? selectFocusOffsets(spacing, FOCUS_FREQUENCY_META[focusFrequency].maxSessions)
+    : new Set<number>();
+
+  if (focusArea) {
+    // Training a body part six days a week is more than most people recover
+    // from, so the per-session slot count drops as frequency rises. Weekly
+    // volume still climbs; it just climbs sanely.
+    const perSession = focusFrequency === 'every' && focusOffsets.size > 3
+      ? 1
+      : FOCUS_FREQUENCY_META[focusFrequency].exercisesPerSession;
+
+    let focusRotation = picker.rotation;
+    for (const offset of [...focusOffsets]) {
+      const session = sessions.get(offset);
+      if (!session) continue;
+      const { exercises, seconds } = buildFocusBlock(
+        focusArea, equipment, experience, goalProfile.id, ctx,
+        new Set(session.exercises.map(e => e.libraryId).filter((id): id is string => !!id)),
+        perSession, focusRotation++,
+      );
+      // The user's equipment may not support this area at all — a back focus on
+      // pure bodyweight has nothing to offer. Drop the day from the count so
+      // the plan never claims focus sessions it did not actually program.
+      if (exercises.length === 0) {
+        focusOffsets.delete(offset);
+        continue;
+      }
+      session.exercises.push(...exercises);
+      session.seconds += seconds;
+      focusArea.muscles.forEach(m => { if (!session.muscles.includes(m)) session.muscles.push(m); });
+      sessions.set(offset, session);
+    }
+  }
+
   let conditioningIndex = 0;
   for (const offset of conditioningOffsets) {
     const session = sessions.get(offset);
@@ -461,9 +592,20 @@ export function buildProgram(input: ProgramInput): WorkoutPlan {
     volumeMultiplier: cycle.volumeMultiplier,
     intensityMultiplier: cycle.intensityMultiplier,
     weeklySets,
-    coachNotes: buildCoachNotes(cycle.note, split.rationale, goalProfile.summary, weeklySets, goalProfile.weeklySetTarget),
+    coachNotes: buildCoachNotes(
+      cycle.note, split.rationale, goalProfile.summary, weeklySets, goalProfile.weeklySetTarget,
+      focusArea ? { area: focusArea, frequency: focusFrequency, sessions: focusOffsets.size } : null,
+    ),
     reentryFromDaysOff: input.reentryFromDaysOff,
     trainingDayIndices: chosenDays ?? undefined,
+    focus: focusArea
+      ? {
+          area: focusArea.id,
+          label: focusArea.label,
+          frequency: focusFrequency,
+          sessions: focusOffsets.size,
+        }
+      : undefined,
   };
 
   return { weekNumber: programWeek, days, createdAt: Date.now(), meta };
@@ -492,8 +634,20 @@ function buildCoachNotes(
   goalSummary: string,
   weeklySets: Partial<Record<MuscleGroup, number>>,
   target: number,
+  focus: { area: FocusArea; frequency: FocusFrequency; sessions: number } | null,
 ): string[] {
   const notes = [cycleNote, splitRationale, goalSummary];
+  if (focus && focus.sessions === 0) {
+    notes.push(
+      `${focus.area.label} focus is on, but nothing in your equipment list can train it directly — add the gear it needs, or pick another focus.`,
+    );
+  } else if (focus) {
+    const cadence = FOCUS_FREQUENCY_META[focus.frequency].label.toLowerCase();
+    notes.push(
+      `${focus.area.label} focus (${cadence}): extra work on ${focus.sessions} of your ${focus.sessions === 1 ? 'session' : 'sessions'}. ${focus.area.rationale}`,
+    );
+    notes.push(focus.area.reality);
+  }
   const low = AUDITED_MUSCLES.filter(m => (weeklySets[m] ?? 0) > 0 && (weeklySets[m] ?? 0) < target * 0.5);
   if (low.length > 0 && low.length <= 4) {
     notes.push(

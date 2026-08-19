@@ -4701,3 +4701,15 @@ body { background: transparent; }
 
 /* Momentum inherited from sibling variations of the same movement pattern. */
 .ghost-brief-meta.carried { color: var(--accent); font-weight: 700; }
+
+/* Focus-area specialization: the honest caveat shown under the picker. */
+.tune-focus-reality {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text3);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: -4px 0 4px;
+}
